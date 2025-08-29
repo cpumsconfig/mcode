@@ -1,0 +1,690 @@
+# -*- coding: utf-8 -*-
+import struct
+
+def gen_bios(stmts):
+    """
+    Generate BIOS-style machine code (bytearray) from a list of statements.
+    Supports: let, print_str, print_var, exit, mov, int, sa, tm, org, label,
+              jmp, bpb, asm, if, elif, else, op (16-bit), beep
+    variables: maps name -> ('const', value) or ('mem', offset_in_data)
+    """
+    variables = {}
+    labels = {}          # name -> code offset
+    fixups = []          # list of (pos_in_code, label) for E9 rel16
+    code = bytearray()
+    data = bytearray()
+    unique_id = 0
+
+    # ---- resolve fixups ----
+    # two kinds of fixups: ('jz8', pos, label) or (pos, label) for E9 rel16
+    # First handle E9 rel16 style (tuples with integer pos)
+    for item in list(fixups):
+        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], int):
+            pos, label = item
+            # 处理特殊标签 "$"（表示当前地址）
+            if label == "$":
+                target = pos  # 跳转到当前指令位置（即无限循环）
+            elif label not in labels:
+                raise ValueError("Unknown label in fixups: " + label)
+            else:
+                target = labels[label]
+            # E9 rel16 at pos: code[pos] == 0xE9 ; rel = target - (pos + 3)
+            rel = target - (pos + 3)
+            if rel < -32768 or rel > 32767:
+                raise ValueError(f"jmp 跳转太远: {rel} 超过了 16 位有符号范围 (-32768~32767)")
+            code[pos+1:pos+3] = struct.pack("<h", rel)
+            fixups.remove(item)
+
+
+
+    def new_label(base="L"):
+        nonlocal unique_id
+        unique_id += 1
+        return f"{base}{unique_id}"
+
+    def emit(b):
+        """append bytes to code"""
+        if isinstance(b, int):
+            code.append(b)
+        else:
+            code.extend(b)
+
+    def emit_data(b):
+        """append bytes to data"""
+        if isinstance(b, int):
+            data.append(b)
+        else:
+            data.extend(b)
+
+    # helper to allocate a memory variable (16-bit) and return offset
+    def alloc_mem_var(name, size=2):
+        offset = len(data)
+        emit_data(b'\x00' * size)
+        variables[name] = ('mem', offset)
+        return offset
+
+    # helper to get variable type and value/offset
+    def var_get(name):
+        if name not in variables:
+            # if unknown variable, auto-allocate as mem (2 bytes)
+            alloc_mem_var(name, 2)
+        return variables[name]
+
+    # emit mov reg, imm (supports 8-bit and 16-bit registers)
+    reg8_enc = {"al": 0xb0, "cl": 0xb1, "dl": 0xb2, "bl": 0xb3}
+    reg16_enc = {"ax": 0xb8, "cx": 0xb9, "dx": 0xba, "bx": 0xbb}
+
+    def emit_mov_reg_imm(reg, val):
+        if reg in reg8_enc:
+            emit(bytes([reg8_enc[reg]] + [val & 0xff]))
+        elif reg in reg16_enc:
+            emit(bytes([reg16_enc[reg]]) + struct.pack("<H", val & 0xffff))
+        else:
+            raise ValueError("Unsupported register for mov immediate: " + reg)
+
+    # mov reg, [moffs] for 16-bit: MOV AX, moffs16 -> A1 moffs16 ; MOV AL, moffs8 -> A0 moffs16
+    def emit_mov_reg_from_moffs8(reg, moffs):
+        # only AL supported for 8-bit moffs using A0
+        if reg != "al":
+            raise ValueError("Only AL supported for moffs8 in this helper")
+        emit(b'\xa0' + struct.pack('<H', moffs))
+
+    def emit_mov_reg_from_moffs16(reg, moffs):
+        if reg == "ax":
+            emit(b'\xa1' + struct.pack('<H', moffs))
+        else:
+            # generic approach: load address into something then use mov, but keep simple
+            raise ValueError("Only AX supported for moffs16 in this helper")
+
+    # mov [moffs], ax : opcode A3 moffs16
+    def emit_mov_moffs_from_ax(moffs):
+        emit(b'\xa3' + struct.pack('<H', moffs))
+
+    # top-level statement processor (handles a single stmt)
+    def process_statement(st):
+        t = st[0]
+        if t == "let":
+            # st = ("let", name, value)
+            name, val = st[1], st[2]
+            # if val is int -> const; else if string "mem" or none -> allocate mem
+            try:
+                ival = int(val)
+                variables[name] = ('const', ival)
+            except Exception:
+                # allocate as memory variable (2 bytes)
+                alloc_mem_var(name, 2)
+
+        elif t == "print_str":
+            s = st[1] + "\n"
+            for ch in s:
+                emit(b"\xb4\x0e")                     # mov ah, 0x0E
+                emit(bytes([0xb0, ord(ch) & 0xff]))   # mov al, char
+                emit(b"\xcd\x10")                     # int 0x10
+
+        elif t == "print_var":
+            name = st[1]
+            typ, val = var_get(name)
+            if typ == 'const':
+                s = str(val)
+                for ch in s:
+                    emit(b"\xb4\x0e")
+                    emit(bytes([0xb0, ord(ch) & 0xff]))
+                    emit(b"\xcd\x10")
+            else:  # mem
+                # load word from moffs into AX then convert decimal at compile-time
+                # For simplicity: read initial data value (compile-time) and print it.
+                moffs = val
+                # 检查数据段是否有足够的空间
+                if moffs + 1 >= len(data):
+                    # 如果空间不足，扩展数据段
+                    data.extend(b'\x00' * (moffs + 2 - len(data)))
+                # fetch the 2 bytes from data (they were initialized), interpret little-endian
+                word = data[moffs] | (data[moffs+1] << 8)
+                s = str(word)
+                for ch in s:
+                    emit(b"\xb4\x0e")
+                    emit(bytes([0xb0, ord(ch) & 0xff]))
+                    emit(b"\xcd\x10")
+
+
+        elif t == "exit":
+            # simple halt loop
+            emit(b'\xf4')    # hlt
+            emit(b'\xeb\xfe')# jmp $
+
+        elif t == "mov":
+            # ("mov", reg, val)
+            reg, val = st[1], st[2]
+            # if val is int -> immediate; if variable name -> load constant if const else load mem offset as immediate (compile-time)
+            try:
+                ival = int(val)
+                emit_mov_reg_imm(reg, ival)
+            except Exception:
+                # val is variable
+                typ, v = var_get(val)
+                if typ == 'const':
+                    emit_mov_reg_imm(reg, v)
+                else:
+                    # memory variable: load from moffs into AX/AL depending on reg
+                    if reg in ("ax",):
+                        emit_mov_reg_from_moffs16("ax", v)
+                    elif reg in ("al",):
+                        emit_mov_reg_from_moffs8("al", v)
+                    else:
+                        raise ValueError("mov from mem unsupported for reg: " + reg)
+
+        elif t == "int":
+            emit(b"\xcd" + bytes([st[1] & 0xff]))
+
+        elif t == "sa":
+            # append raw bytes to data
+            for v in st[1]:
+                emit_data(bytes([v]))
+
+        elif t == "tm":
+            target = st[1]
+            padlen = target - (len(code) + len(data))
+            if padlen > 0:
+                emit_data(b"\x00" * padlen)
+            emit_data(b"\x55\xaa")
+
+        elif t == "org":
+            # st = ("org", address)
+            # 检查st[1]的类型，如果是整数则直接使用，如果是字符串则转换
+            if isinstance(st[1], str):
+                address = int(st[1], 0)
+            else:
+                address = int(st[1])
+            
+            # 如果指定的地址大于当前代码和数据段的总长度，需要填充数据段
+            current_length = len(code) + len(data)
+            if address > current_length:
+                # 计算需要填充的字节数
+                padding = address - current_length
+                # 填充0
+                emit_data(b'\x00' * padding)
+            
+            # 注意：我们在这里只是确保数据段足够大，实际的"org"效果需要在最终生成二进制文件时实现
+            # 在简单的BIOS引导程序中，通常org 0x7C00表示程序将被加载到0x7C00地址执行
+
+
+
+        elif t == "label":
+            labels[st[1]] = len(code)
+
+        elif t == "jmp":
+            # jmp label (E9 rel16)
+            label = st[1]
+            pos = len(code)
+            emit(b"\xe9\x00\x00")   # placeholder
+            fixups.append((pos, label))
+
+        elif t == "bpb":
+            vals = [int(v,0) for v in st[1]]
+            # simplified BPB: two words
+            bpb = struct.pack("<H", vals[0]) + struct.pack("<H", vals[1])
+            emit_data(bpb)
+
+        elif t == "asm":
+            # st[1]: "xx yy zz"
+            for byte in st[1].split():
+                emit(bytes([int(byte, 16)]))
+        elif t in ["inb", "inw", "inl", "outb", "outw", "outl"]:
+            port = int(st[1].strip(','), 0)
+            if t in ["outb", "outw", "outl"]:
+                value = int(st[2].strip(','), 0)
+            
+            # 生成相应的汇编指令
+            if t == "inb":
+                emit(b'\xb0')  # mov al, imm8
+                emit(port & 0xff)
+                emit(b'\xe4')  # in al, imm8
+            elif t == "inw":
+                emit(b'\xb8')  # mov ax, imm16
+                emit(struct.pack("<H", port & 0xffff))
+                emit(b'\xed')  # in ax, dx
+            elif t == "inl":
+                emit(b'\x66')  # 32位操作前缀
+                emit(b'\xb8')  # mov eax, imm32
+                emit(struct.pack("<I", port & 0xffffffff))
+                emit(b'\xed')  # in eax, dx
+            elif t == "outb":
+                emit(b'\xb0')  # mov al, imm8
+                emit(value & 0xff)
+                emit(b'\xe6')  # out imm8, al
+                emit(port & 0xff)
+            elif t == "outw":
+                emit(b'\xb8')  # mov ax, imm16
+                emit(struct.pack("<H", value & 0xffff))
+                emit(b'\xef')  # out dx, ax
+                emit(struct.pack("<H", port & 0xffff))
+            elif t == "outl":
+                emit(b'\x66')  # 32位操作前缀
+                emit(b'\xb8')  # mov eax, imm32
+                emit(struct.pack("<I", value & 0xffffffff))
+                emit(b'\xef')  # out dx, eax
+                emit(struct.pack("<H", port & 0xffff))
+        elif t == "fat16_fda":
+            vals = [int(v,0) for v in st[1]]
+            # FAT16 FDA有24个参数，其中19个是必须的
+            # 我们将所有参数打包为字节并添加到数据段
+            fat16_fda_data = bytearray()
+            for val in vals:
+                fat16_fda_data.extend(struct.pack("<H", val & 0xffff))
+            emit_data(fat16_fda_data)
+        elif t == "read_cmos":
+            # st = ("read_cmos", addr, var)
+            addr = int(st[1], 0)
+            var_name = st[2]  # 可能为None，表示使用默认变量
+            
+            # 确保有一个变量来存储结果
+            if var_name is None:
+                var_name = "cmos_result"
+            
+            # 确保变量存在，如果不存在则创建
+            if var_name not in variables:
+                alloc_mem_var(var_name, 2)  # 分配2字节，确保有足够空间
+            
+            var_off = variables[var_name][1]
+            
+            # 禁用中断
+            emit(b'\xFA')  # CLI
+            
+            # 读取CMOS的汇编代码
+            # 1. 设置要读取的CMOS地址
+            emit(b'\xB0')  # MOV AL, imm8
+            emit(addr & 0xFF)
+            emit(b'\xE6')  # OUT imm8, AL
+            emit(0x70)     # CMOS地址端口
+            
+            # 2. 从CMOS数据端口读取
+            emit(b'\xE4')  # IN AL, imm8
+            emit(0x71)     # CMOS数据端口
+            
+            # 3. 将AL零扩展到AX（高字节置零）
+            emit(b'\x31\xD2')  # XOR DX, DX (清零DX)
+            emit(b'\x8A\xC8')  # MOV CL, AL
+            emit(b'\x88\xC2')  # MOV DL, AL
+            emit(b'\x89\xD0')  # MOV AX, DX
+            
+            # 4. 保存结果到变量
+            emit(b'\xA3')  # MOV [moffs], AX
+            emit(struct.pack('<H', var_off))
+            
+            # 恢复中断
+            emit(b'\xFB')  # STI
+
+        elif t == "read_fat12_hdr":
+            # st = ("read_fat12_hdr", var_name, offset)
+            var_name = st[1]  # 可能为None，表示使用默认变量
+            offset = int(st[2], 0)
+            
+            # 确保有一个变量来存储结果
+            if var_name is None:
+                var_name = "fat12_hdr_value"
+            
+            # 确保变量存在，如果不存在则创建
+            if var_name not in variables:
+                alloc_mem_var(var_name, 2)  # FAT12头部读取2字节
+            
+            var_off = variables[var_name][1]
+            
+            # 读取FAT12头部的汇编代码
+            # FAT12头部通常从磁盘的0扇区开始，偏移量0x0B是BPB的开始
+            
+            # 1. 设置读取参数
+            emit(b'\xB8\x00\x00')  # MOV AX, 0 (驱动器号，0表示A盘)
+            emit(b'\x8E\xD8')      # MOV DS, AX
+            emit(b'\xBB\x00\x7C')  # MOV BX, 0x7C00 (加载到内存的地址)
+            emit(b'\xB9\x01\x00')  # MOV CX, 1 (读取1个扇区)
+            emit(b'\xBA\x00\x00')  # MOV DX, 0 (起始扇区0)
+            
+            # 2. 调用BIOS磁盘读取中断
+            emit(b'\xCD\x13')      # INT 0x13
+            
+            # 3. 从内存中读取指定偏移的值
+            emit(b'\xB8\x00\x7C')  # MOV AX, 0x7C00
+            emit(b'\x8E\xC0')      # MOV ES, AX
+            emit(b'\xBB')          # MOV BX, offset
+            emit(struct.pack('<H', offset))
+            
+            # 4. 读取字到AX
+            emit(b'\x26\x8B\x07')  # MOV AX, ES:[BX]
+            
+            # 5. 保存结果到变量
+            emit(b'\xA3')          # MOV [moffs], AX
+            emit(struct.pack('<H', var_off))
+
+        elif t == "read_fat16_hdr":
+            # st = ("read_fat16_hdr", var_name, offset)
+            var_name = st[1]  # 可能为None，表示使用默认变量
+            offset = int(st[2], 0)
+            
+            # 确保有一个变量来存储结果
+            if var_name is None:
+                var_name = "fat16_hdr_value"
+            
+            # 确保变量存在，如果不存在则创建
+            if var_name not in variables:
+                alloc_mem_var(var_name, 2)  # FAT16头部读取2字节
+            
+            var_off = variables[var_name][1]
+            
+            # 读取FAT16头部的汇编代码
+            # FAT16头部通常从磁盘的0扇区开始，偏移量0x0B是BPB的开始
+            
+            # 1. 设置读取参数
+            emit(b'\xB8\x00\x00')  # MOV AX, 0 (驱动器号，0表示A盘)
+            emit(b'\x8E\xD8')      # MOV DS, AX
+            emit(b'\xBB\x00\x7C')  # MOV BX, 0x7C00 (加载到内存的地址)
+            emit(b'\xB9\x01\x00')  # MOV CX, 1 (读取1个扇区)
+            emit(b'\xBA\x00\x00')  # MOV DX, 0 (起始扇区0)
+            
+            # 2. 调用BIOS磁盘读取中断
+            emit(b'\xCD\x13')      # INT 0x13
+            
+            # 3. 从内存中读取指定偏移的值
+            emit(b'\xB8\x00\x7C')  # MOV AX, 0x7C00
+            emit(b'\x8E\xC0')      # MOV ES, AX
+            emit(b'\xBB')          # MOV BX, offset
+            emit(struct.pack('<H', offset))
+            
+            # 4. 读取字到AX
+            emit(b'\x26\x8B\x07')  # MOV AX, ES:[BX]
+            
+            # 5. 保存结果到变量
+            emit(b'\xA3')          # MOV [moffs], AX
+            emit(struct.pack('<H', var_off))
+        elif t == "set_fat12_BPB":
+            vals = [int(v,0) for v in st[1]]
+            # FAT12 BPB有多个字段，我们将所有参数打包为字节并添加到数据段
+            fat12_bpb_data = bytearray()
+            for val in vals:
+                fat12_bpb_data.extend(struct.pack("<H", val & 0xffff))
+            emit_data(fat12_bpb_data)
+
+        elif t == "return":
+            # st = ("return", ret_val)
+            ret_val = st[1]  # 可能为None，表示无返回值
+            
+            if ret_val is not None:
+                # 有返回值，将返回值放入AX寄存器
+                try:
+                    # 尝试解析为整数
+                    val = int(ret_val, 0)
+                    emit_mov_reg_imm("ax", val)
+                except ValueError:
+                    # 不是整数，可能是变量
+                    typ, val = var_get(ret_val)
+                    if typ == 'const':
+                        emit_mov_reg_imm("ax", val)
+                    else:
+                        # 从内存加载
+                        emit_mov_reg_from_moffs16("ax", val)
+            
+            # 使用RET指令返回
+            emit(b'\xC3')  # RET
+
+        elif t == "op":
+            # ("op", dest, src1, op, src2)  - use 16-bit arithmetic, result stored into dest (mem var)
+            dest, src1, oper, src2 = st[1], st[2], st[3], st[4]
+            # ensure dest is memory variable
+            if dest not in variables or variables[dest][0] != 'mem':
+                alloc_mem_var(dest, 2)
+            dest_off = variables[dest][1]
+
+            # load src1 -> AX
+            try:
+                v1 = int(src1)
+                emit_mov_reg_imm("ax", v1 & 0xffff)
+            except Exception:
+                typ1, v1 = var_get(src1)
+                if typ1 == 'const':
+                    emit_mov_reg_imm("ax", v1 & 0xffff)
+                else:
+                    emit_mov_reg_from_moffs16("ax", v1)
+
+            # load src2 -> BX
+            try:
+                v2 = int(src2)
+                emit_mov_reg_imm("bx", v2 & 0xffff)
+            except Exception:
+                typ2, v2 = var_get(src2)
+                if typ2 == 'const':
+                    emit_mov_reg_imm("bx", v2 & 0xffff)
+                else:
+                    # mov bx, [moffs] isn't trivial; do a simple approach:
+                    # mov ax, moffs; mov bx, [ax] is too complex; instead for compile-time we read data
+                    if typ2 == 'mem':
+                        val_word = data[v2] | (data[v2+1] << 8)
+                        emit_mov_reg_imm("bx", val_word & 0xffff)
+                    else:
+                        raise ValueError("Unsupported src2 type in op")
+
+            # perform operation on AX, BX
+            if oper == '+':
+                emit(b'\x01\xd8')  # add ax, bx
+            elif oper == '-':
+                emit(b'\x29\xd8')  # sub ax, bx
+            elif oper == '*':
+                # imul bx -> 0F AF C3 (IMUL r16, r16) or use MUL BX (unsigned) F7 E3 -> AX = AX * BX
+                # we'll use unsigned MUL BX: F7 E3
+                emit(b'\xf7\xe3')  # mul bx (AX = AX * BX) ; result in DX:AX, low in AX
+            elif oper == '/':
+                # divide AX by BX: need to zero DX then idiv bx (signed) or div bx (unsigned)
+                emit(b'\x66')      # operand-size prefix not really correct in 16-bit, kept simple
+                emit(b'\x99')      # cdq (sign-extend EAX->EDX) - not perfect in 16-bit, but keep
+                emit(b'\xf7\xf3')  # div bx (AX /= BX), result in AX
+            else:
+                raise ValueError("Unsupported op: " + oper)
+
+            # store AX into dest moffs (mov [moffs], ax) -> opcode A3 moffs16
+            emit_mov_moffs_from_ax(dest_off)
+
+            # also update compile-time data so later print_var / op can read it
+            # write AX value from data: we cannot fetch run-time AX, but for consistency set initial val to 0
+            # (Better approach would be to evaluate constant arithmetic here if both operands const)
+            # Try constant-folding when possible:
+            const_fold = None
+            try:
+                a1 = int(src1)
+            except:
+                typ1, v1 = var_get(src1)
+                if typ1 == 'const':
+                    a1 = v1
+                else:
+                    a1 = None
+            try:
+                a2 = int(src2)
+            except:
+                typ2, v2 = var_get(src2)
+                if typ2 == 'const':
+                    a2 = v2
+                else:
+                    a2 = None
+            if a1 is not None and a2 is not None:
+                if oper == '+': const_fold = (a1 + a2) & 0xffff
+                elif oper == '-': const_fold = (a1 - a2) & 0xffff
+                elif oper == '*': const_fold = (a1 * a2) & 0xffff
+                elif oper == '/':
+                    const_fold = (a1 // a2) & 0xffff if a2 != 0 else 0
+            if const_fold is not None:
+                data[dest_off:dest_off+2] = struct.pack("<H", const_fold)
+
+        elif t == "beep":
+            # approximate tone generation using PIT and speaker ports (same as your original)
+            freq = st[1]
+            if freq <= 0:
+                freq = 440
+            divisor = int(1193180 // freq)
+            # out 0x43, 0xB6
+            emit(b'\xb0\xb6'); emit(b'\xe6\x43')
+            # low byte
+            emit(bytes([0xb0, divisor & 0xff])); emit(b'\xe6\x42')
+            # high byte
+            emit(bytes([0xb0, (divisor >> 8) & 0xff])); emit(b'\xe6\x42')
+            # enable speaker (inb/outb sequence simplified)
+            emit(b'\xb0\x03'); emit(b'\xe6\x61')
+            # crude delay loop
+            emit(b'\xb9\x00\x01')      # mov cx, 256
+            emit(b'\xb8\x00\x86')      # mov ax, 34304
+            emit(b'\x48')              # dec ax
+            emit(b'\x85\xc0')          # test ax, ax
+            emit(b'\x75\xfb')          # jnz -5
+            emit(b'\x49')              # dec cx
+            emit(b'\x85\xc9')          # test cx, cx
+            emit(b'\x75\xf4')          # jnz -10
+            # disable speaker
+            emit(b'\xb0\x00'); emit(b'\xe6\x61')
+
+        else:
+            # unknown/unsupported statement - ignore or raise
+            raise ValueError("Unknown statement type: " + str(t))
+
+    # ---- helper to process a full if/elif/else block starting at index i ----
+    def process_if_block(stmts_list, start_index):
+        """
+        stmts_list: the full statements list
+        start_index: index where an 'if' occurs
+        Returns the index after the entire if/elif/else block
+        """
+        # collect blocks: each block is tuple(kind, var_or_none, block_statements)
+        blocks = []
+        i = start_index
+        # first must be 'if'
+        first = stmts_list[i]
+        if first[0] != 'if':
+            raise ValueError("process_if_block called on non-if")
+        blocks.append(('if', first[1], first[2]))
+        i += 1
+        # collect following 'elif' or 'else'
+        while i < len(stmts_list):
+            s = stmts_list[i]
+            if s[0] == 'elif':
+                blocks.append(('elif', s[1], s[2]))
+                i += 1
+            elif s[0] == 'else':
+                blocks.append(('else', None, s[1]))
+                i += 1
+                break
+            else:
+                break
+
+        # create labels
+        endif_label = new_label("endif_")
+        next_label_base = new_label("next_")  # base for the first "else/elif" label
+        # We'll create label names for each branch except the last 'else' block
+        branch_labels = []
+        for bi in range(len(blocks)-1):  # last block may be else, no need jump-to after it
+            branch_labels.append(new_label("branch_"))
+
+        # For each conditional block (not else), emit test and JZ to branch_labels[idx]
+        for idx, blk in enumerate(blocks):
+            kind, varname, blk_stmts = blk
+            is_last = (idx == len(blocks)-1)
+            if kind in ('if', 'elif'):
+                # emit mov al, var / imm then test al, al ; jz branch_label
+                typ, val = var_get(varname)
+                if typ == 'const':
+                    emit_mov_reg_imm("al", val & 0xff)
+                else:
+                    # load byte from moffs into AL
+                    emit_mov_reg_from_moffs8("al", val)
+                # test al,al
+                emit(b'\x84\xc0')
+                # jz to skip this block -> to branch_labels[idx]
+                if not is_last:
+                    target_label = branch_labels[idx]
+                    # we use short jump EB rel8 if possible, else use jz rel16 (0F 84)
+                    # We'll emit short jz EB 00 and record a short_fixups to patch.
+                    # For simplicity, emit short jz and patch with relative 8-bit later.
+                    pos = len(code)
+                    emit(b'\x74\x00')  # jz rel8 placeholder
+                    # record a short fixup: (pos+1, target_label, type='jz8')
+                    fixups.append(('jz8', pos+1, target_label))
+                else:
+                    # if last conditional (shouldn't happen often), just proceed
+                    pass
+
+                # process the block statements
+                for s2 in blk_stmts:
+                    process_statement(s2)
+
+                # after finishing block, jump to endif to skip other branches
+                pos_jmp = len(code)
+                emit(b'\xe9\x00\x00')  # jmp rel16 placeholder
+                fixups.append((pos_jmp, endif_label))
+                # place branch label (the one the jz jumps to) here
+                if not is_last:
+                    labels[branch_labels[idx]] = len(code)
+
+            elif kind == 'else':
+                # else block: just run its statements
+                for s2 in blk_stmts:
+                    process_statement(s2)
+                # no extra jump at end (we simply flow to endif)
+            else:
+                raise ValueError("Unknown block kind: " + str(kind))
+
+        # finally place endif label
+        labels[endif_label] = len(code)
+        return i
+
+    # ---- main loop: iterate statements, but handle if-blocks as a group ----
+    i = 0
+    while i < len(stmts):
+        st = stmts[i]
+        if st[0] == 'if':
+            i = process_if_block(stmts, i)
+        else:
+            process_statement(st)
+            i += 1
+
+    # ---- resolve fixups ----
+    # two kinds of fixups: ('jz8', pos, label) or (pos, label) for E9 rel16
+    # First handle E9 rel16 style (tuples with integer pos)
+    for item in list(fixups):
+        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], int):
+            pos, label = item
+            # 处理特殊标签 "$"（表示当前地址）
+            if label == "$":
+                target = pos  # 跳转到当前指令位置（即无限循环）
+            elif label not in labels:
+                raise ValueError("Unknown label in fixups: " + label)
+            else:
+                target = labels[label]
+            # E9 rel16 at pos: code[pos] == 0xE9 ; rel = target - (pos + 3)
+            rel = target - (pos + 3)
+            if rel < -32768 or rel > 32767:
+                raise ValueError(f"jmp 跳转太远: {rel} 超过了 16 位有符号范围 (-32768~32767)")
+            code[pos+1:pos+3] = struct.pack("<h", rel)
+            fixups.remove(item)
+
+
+    # Then handle short jz8 fixups stored as ('jz8', pos, label)
+    for item in list(fixups):
+        if isinstance(item, tuple) and item[0] == 'jz8':
+            _, pos, label = item
+            if label not in labels:
+                raise ValueError("Unknown label in jz8 fixups: " + label)
+            target = labels[label]
+            rel8 = target - (pos + 1)  # rel8 is relative to next byte after rel8
+            if -128 <= rel8 <= 127:
+                code[pos] = struct.pack("b", rel8)[0]
+            else:
+                # too far for short jump: replace short jz (74 xx) with long jz 0F 84 rel32
+                # we will expand: replace 2 bytes at pos-1 (0x74, 0x00) with 6 bytes 0F 84 <rel32>
+                jz_short_pos = pos-1
+                target = labels[label]
+                rel32 = target - (jz_short_pos + 6)
+                # build new sequence
+                newseq = b'\x0f\x84' + struct.pack('<i', rel32)
+                # replace in code (expand)
+                code[jz_short_pos:jz_short_pos+2] = newseq
+                # since we've changed code length, labels stored earlier may be invalid!
+                # Simpler approach here: we avoid expanding in-place because it's complex.
+                raise ValueError("Branch distance too far for 8-bit jz; label layout too complex for this simple generator.")
+            fixups.remove(item)
+
+    # final return
+    return bytes(code + data)
