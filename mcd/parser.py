@@ -96,14 +96,268 @@ def parse(tokens):
             stmts.append(("int", int(tokens[i+1][0],0)))
             i += 2
 
-        # 在 parser.py 中找到处理 "sa" 语句的部分，将其替换为以下代码：
-
         elif t == "sa":
             if i+1 >= len(tokens):
                 raise SyntaxError(f"第{line_num}行: sa语句缺少参数")
             values = [int(x,0) for x in tokens[i+1][0].split(",")]
             stmts.append(("sa", values))
             i += 2
+        elif t in ["je", "jz", "jne", "jnz", "js", "jns", "jo", "jno", "jb", "jc", "jnb", "jnc", "jbe", "ja", "jle", "jg", "jl", "jge", "jp", "jpe", "jnp", "jpo"]:
+            # 条件跳转指令
+            if i+1 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: {t}语句缺少目标标签")
+            target = tokens[i+1][0]
+            stmts.append((t, target))
+            i += 2
+
+        elif t in ["push", "pop"]:
+            # 堆栈操作指令
+            if i+1 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: {t}语句缺少操作数")
+            operand = tokens[i+1][0]
+            
+            # 检查操作数是否为寄存器或立即数
+            if operand in ["ax", "bx", "cx", "dx", "si", "di", "sp", "bp", "es", "cs", "ss", "ds"]:
+                # 寄存器操作数
+                stmts.append((t, operand))
+            else:
+                # 尝试解析为立即数
+                try:
+                    imm = int(operand, 0)
+                    stmts.append((t, imm))
+                except ValueError:
+                    raise SyntaxError(f"第{line_num}行: {t}语句的操作数必须是寄存器或立即数")
+            
+            i += 2
+
+        elif t in ["clc", "stc", "cmc", "cld", "std", "cli", "sti"]:
+            # 标志操作指令
+            stmts.append((t,))
+            i += 1
+
+        elif t in ["inc", "dec"]:
+            # INC/DEC 指令
+            if i+1 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: {t}语句缺少操作数")
+            operand = tokens[i+1][0]
+            
+            # 检查操作数是否为寄存器
+            if operand in ["al", "bl", "cl", "dl", "ah", "bh", "ch", "dh", "ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                stmts.append((t, operand))
+            else:
+                raise SyntaxError(f"第{line_num}行: {t}语句的操作数必须是寄存器")
+            
+            i += 2
+
+        elif t in ["add", "sub", "adc", "sbb"]:
+            # ADD/SUB/ADC/SBB 指令
+            if i+3 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: {t}语句不完整")
+            
+            reg1 = tokens[i+1][0]
+            if tokens[i+2][0] != ",":
+                raise SyntaxError(f"第{line_num}行: {t}语句语法错误，应为 {t} reg1, reg2/imm")
+            
+            reg2_or_imm = tokens[i+3][0]
+            
+            # 检查第一个操作数是否为寄存器
+            if reg1 not in ["al", "bl", "cl", "dl", "ah", "bh", "ch", "dh", "ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                raise SyntaxError(f"第{line_num}行: {t}语句的第一个操作数必须是寄存器")
+            
+            # 检查第二个操作数是否为寄存器或立即数
+            if reg2_or_imm in ["al", "bl", "cl", "dl", "ah", "bh", "ch", "dh", "ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                # 寄存器操作数
+                stmts.append((t, reg1, reg2_or_imm))
+            else:
+                # 尝试解析为立即数
+                try:
+                    imm = int(reg2_or_imm, 0)
+                    stmts.append((t, reg1, imm))
+                except ValueError:
+                    raise SyntaxError(f"第{line_num}行: {t}语句的第二个操作数必须是寄存器或立即数")
+            
+            i += 4
+
+        elif t in ["mul", "div", "imul", "idiv"]:
+            # MUL/DIV/IMUL/IDIV 指令
+            if i+1 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: {t}语句缺少操作数")
+            operand = tokens[i+1][0]
+            
+            # 检查操作数是否为寄存器
+            if operand in ["al", "bl", "cl", "dl", "ah", "bh", "ch", "dh", "ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                stmts.append((t, operand))
+            else:
+                raise SyntaxError(f"第{line_num}行: {t}语句的操作数必须是寄存器")
+            
+            i += 2
+
+        elif t in ["call", "ret", "iret"]:
+            # 调用和返回指令
+            if t == "call":
+                if i+1 >= len(tokens):
+                    raise SyntaxError(f"第{line_num}行: call语句缺少目标")
+                target = tokens[i+1][0]
+                stmts.append(("call", target))
+                i += 2
+            elif t == "ret":
+                stmts.append(("ret",))
+                i += 1
+            elif t == "iret":
+                stmts.append(("iret",))
+                i += 1
+
+        elif t in ["loop", "loope", "loopne"]:
+            # 循环指令
+            if i+1 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: {t}语句缺少目标标签")
+            target = tokens[i+1][0]
+            stmts.append((t, target))
+            i += 2
+
+        elif t in ["int3", "into"]:
+            # 特殊中断指令
+            stmts.append((t,))
+            i += 1
+
+        elif t == "bound":
+            # BOUND 指令
+            if i+3 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: bound语句不完整")
+            
+            reg = tokens[i+1][0]
+            if tokens[i+2][0] != ",":
+                raise SyntaxError(f"第{line_num}行: bound语句语法错误，应为 bound reg, mem")
+            
+            mem = tokens[i+3][0]
+            
+            # 检查第一个操作数是否为寄存器
+            if reg not in ["ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                raise SyntaxError(f"第{line_num}行: bound语句的第一个操作数必须是16位寄存器")
+            
+            stmts.append(("bound", reg, mem))
+            i += 4
+
+        elif t in ["lds", "les", "lss", "lfs", "lgs"]:
+            # 加载远指针指令
+            if i+3 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: {t}语句不完整")
+            
+            reg = tokens[i+1][0]
+            if tokens[i+2][0] != ",":
+                raise SyntaxError(f"第{line_num}行: {t}语句语法错误，应为 {t} reg, mem")
+            
+            mem = tokens[i+3][0]
+            
+            # 检查第一个操作数是否为寄存器
+            if reg not in ["ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                raise SyntaxError(f"第{line_num}行: {t}语句的第一个操作数必须是16位寄存器")
+            
+            stmts.append((t, reg, mem))
+            i += 4
+
+        elif t in ["nop", "cmp", "test", "and", "or", "xor", "not", "shl", "shr", "sar", "rol", "ror", "rcl", "rcr"]:
+            # 其他指令
+            if t == "nop":
+                # NOP 指令不需要操作数
+                stmts.append(("nop",))
+                i += 1
+            elif t in ["cmp", "test"]:
+                # CMP/TEST 指令
+                if i+3 >= len(tokens):
+                    raise SyntaxError(f"第{line_num}行: {t}语句不完整")
+                
+                reg1 = tokens[i+1][0]
+                if tokens[i+2][0] != ",":
+                    raise SyntaxError(f"第{line_num}行: {t}语句语法错误，应为 {t} reg1, reg2/imm")
+                
+                reg2_or_imm = tokens[i+3][0]
+                
+                # 检查第一个操作数是否为寄存器
+                if reg1 not in ["al", "bl", "cl", "dl", "ah", "bh", "ch", "dh", "ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                    raise SyntaxError(f"第{line_num}行: {t}语句的第一个操作数必须是寄存器")
+                
+                # 检查第二个操作数是否为寄存器或立即数
+                if reg2_or_imm in ["al", "bl", "cl", "dl", "ah", "bh", "ch", "dh", "ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                    # 寄存器操作数
+                    stmts.append((t, reg1, reg2_or_imm))
+                else:
+                    # 尝试解析为立即数
+                    try:
+                        imm = int(reg2_or_imm, 0)
+                        stmts.append((t, reg1, imm))
+                    except ValueError:
+                        raise SyntaxError(f"第{line_num}行: {t}语句的第二个操作数必须是寄存器或立即数")
+                
+                i += 4
+            elif t in ["and", "or", "xor"]:
+                # AND/OR/XOR 指令
+                if i+3 >= len(tokens):
+                    raise SyntaxError(f"第{line_num}行: {t}语句不完整")
+                
+                reg1 = tokens[i+1][0]
+                if tokens[i+2][0] != ",":
+                    raise SyntaxError(f"第{line_num}行: {t}语句语法错误，应为 {t} reg1, reg2/imm")
+                
+                reg2_or_imm = tokens[i+3][0]
+                
+                # 检查第一个操作数是否为寄存器
+                if reg1 not in ["al", "bl", "cl", "dl", "ah", "bh", "ch", "dh", "ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                    raise SyntaxError(f"第{line_num}行: {t}语句的第一个操作数必须是寄存器")
+                
+                # 检查第二个操作数是否为寄存器或立即数
+                if reg2_or_imm in ["al", "bl", "cl", "dl", "ah", "bh", "ch", "dh", "ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                    # 寄存器操作数
+                    stmts.append((t, reg1, reg2_or_imm))
+                else:
+                    # 尝试解析为立即数
+                    try:
+                        imm = int(reg2_or_imm, 0)
+                        stmts.append((t, reg1, imm))
+                    except ValueError:
+                        raise SyntaxError(f"第{line_num}行: {t}语句的第二个操作数必须是寄存器或立即数")
+                
+                i += 4
+            elif t == "not":
+                # NOT 指令
+                if i+1 >= len(tokens):
+                    raise SyntaxError(f"第{line_num}行: {t}语句缺少操作数")
+                operand = tokens[i+1][0]
+                
+                # 检查操作数是否为寄存器
+                if operand in ["al", "bl", "cl", "dl", "ah", "bh", "ch", "dh", "ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                    stmts.append((t, operand))
+                else:
+                    raise SyntaxError(f"第{line_num}行: {t}语句的操作数必须是寄存器")
+                
+                i += 2
+            elif t in ["shl", "shr", "sar", "rol", "ror", "rcl", "rcr"]:
+                # 移位/旋转指令
+                if i+3 >= len(tokens):
+                    raise SyntaxError(f"第{line_num}行: {t}语句不完整")
+                
+                reg = tokens[i+1][0]
+                if tokens[i+2][0] != ",":
+                    raise SyntaxError(f"第{line_num}行: {t}语句语法错误，应为 {t} reg, count/cl")
+                
+                count = tokens[i+3][0]
+                
+                # 检查第一个操作数是否为寄存器
+                if reg not in ["al", "bl", "cl", "dl", "ah", "bh", "ch", "dh", "ax", "bx", "cx", "dx", "si", "di", "sp", "bp"]:
+                    raise SyntaxError(f"第{line_num}行: {t}语句的第一个操作数必须是寄存器")
+                
+                # 检查第二个操作数是否为立即数或CL寄存器
+                if count == "cl":
+                    stmts.append((t, reg, count))
+                else:
+                    # 尝试解析为立即数
+                    try:
+                        imm = int(count, 0)
+                        stmts.append((t, reg, imm))
+                    except ValueError:
+                        raise SyntaxError(f"第{line_num}行: {t}语句的第二个操作数必须是立即数或CL寄存器")
+                
+                i += 4
 
         elif t == "tm":
             if i+1 >= len(tokens):

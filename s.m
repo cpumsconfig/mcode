@@ -1,12 +1,6 @@
 org 0x7c00
 
+print "8848"
 
-
-ah = 0x03
-execute 0x10
-
-print "hello world"
-
-
-tm 510-$
 sa 0x55,0xaa
+tm 512-$

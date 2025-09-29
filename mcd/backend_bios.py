@@ -21,48 +21,6 @@ def gen_bios(stmts):
     global_funcs = {}   # 全局函数：name -> (code_offset, param_count)
     extern_funcs = {}   # 外部函数：name -> (module_name, func_name)
 
-
-    # ---- resolve fixups ----
-    # two kinds of fixups: ('jz8', pos, label) or (pos, label) for E9 rel16
-    # Also handle module function calls: (pos, "module.func")
-    for item in list(fixups):
-        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], int):
-            pos, label = item
-            # 处理特殊标签 "$"（表示当前地址）
-            if label == "$":
-                target = pos  # 跳转到当前指令位置（即无限循环）
-            # 处理模块函数调用
-            elif "." in label:
-                module_name, func_name = label.split(".", 1)
-                if module_name not in modules:
-                    raise ValueError(f"Unknown module in fixups: {module_name}")
-                if func_name not in modules[module_name]['functions']:
-                    raise ValueError(f"Unknown function {func_name} in module {module_name}")
-                target = modules[module_name]['functions'][func_name][0]
-            # 处理普通标签
-            elif label not in labels:
-                raise ValueError("Unknown label in fixups: " + label)
-            else:
-                target = labels[label]
-            
-            # E8 rel16 at pos: code[pos] == 0xE8 ; rel = target - (pos + 3)
-            if code[pos] == 0xE8:  # call指令
-                rel = target - (pos + 3)
-                if rel < -32768 or rel > 32767:
-                    raise ValueError(f"call 跳转太远: {rel} 超过了 16 位有符号范围 (-32768~32767)")
-                code[pos+1:pos+3] = struct.pack("<h", rel)
-            # E9 rel16 at pos: code[pos] == 0xE9 ; rel = target - (pos + 3)
-            elif code[pos] == 0xE9:  # jmp指令
-                rel = target - (pos + 3)
-                if rel < -32768 or rel > 32767:
-                    raise ValueError(f"jmp 跳转太远: {rel} 超过了 16 位有符号范围 (-32768~32767)")
-                code[pos+1:pos+3] = struct.pack("<h", rel)
-            
-            fixups.remove(item)
-
-
-
-
     def new_label(base="L"):
         nonlocal unique_id
         unique_id += 1
@@ -131,8 +89,25 @@ def gen_bios(stmts):
         if reg == "ax":
             emit(b'\xa1' + struct.pack('<H', moffs))
         else:
-            # generic approach: load address into something then use mov, but keep simple
-            raise ValueError("Only AX supported for moffs16 in this helper")
+            # 使用通用寄存器加载方式
+            emit_mov_reg_imm("bx", moffs)
+            emit(b'\x8b')  # MOV reg, [BX]
+            if reg == "cx":
+                emit(b'\x0b')
+            elif reg == "dx":
+                emit(b'\x13')
+            elif reg == "bx":
+                emit(b'\x1b')
+            elif reg == "sp":
+                emit(b'\x23')
+            elif reg == "bp":
+                emit(b'\x2b')
+            elif reg == "si":
+                emit(b'\x33')
+            elif reg == "di":
+                emit(b'\x3b')
+            else:
+                raise ValueError("Unsupported register for moffs16: " + reg)
 
     # mov [moffs], ax : opcode A3 moffs16
     def emit_mov_moffs_from_ax(moffs):
@@ -204,8 +179,8 @@ def gen_bios(stmts):
                     emit_mov_reg_imm(reg, v)
                 else:
                     # memory variable: load from moffs into AX/AL depending on reg
-                    if reg in ("ax",):
-                        emit_mov_reg_from_moffs16("ax", v)
+                    if reg in ("ax", "cx", "dx", "bx", "sp", "bp", "si", "di"):
+                        emit_mov_reg_from_moffs16(reg, v)
                     elif reg in ("al",):
                         emit_mov_reg_from_moffs8("al", v)
                     else:
@@ -220,11 +195,27 @@ def gen_bios(stmts):
                 emit_data(bytes([v]))
 
         elif t == "tm":
-            target = st[1]
-            padlen = target - (len(code) + len(data))
-            if padlen > 0:
-                emit_data(b"\x00" * padlen)
-            emit_data(b"\x55\xaa")
+            # 确保正确解析tm指令的参数
+            if isinstance(st[1], str):
+                target = int(st[1], 0)  # 支持十进制、十六进制等格式
+            else:
+                target = int(st[1])
+            
+            current_length = len(code) + len(data)
+            
+            if current_length > target:
+                # 计算超过的字节数
+                overflow = current_length - target
+                error_msg = f"Code exceeds TM limit by {overflow} bytes\n"
+                raise ValueError(error_msg)
+            else:
+                # 计算需要填充的字节数，但要保留最后两个字节给引导扇区标记
+                padding = target - current_length - 2  # 减去2字节给0x55AA
+                if padding > 0:
+                    # 填充0直到达到目标大小-2
+                    emit_data(b'\x00' * padding)
+                # 添加引导扇区标记
+                emit_data(b'\x55\xaa')
 
         elif t == "org":
             # st = ("org", address)
@@ -236,11 +227,6 @@ def gen_bios(stmts):
             
             # 如果指定的地址大于当前代码和数据段的总长度，需要填充数据段
             current_length = len(code) + len(data)
-            if address > current_length:
-                # 计算需要填充的字节数
-                padding = address - current_length
-                # 填充0
-                emit_data(b'\x00' * padding)
             
             # 注意：我们在这里只是确保数据段足够大，实际的"org"效果需要在最终生成二进制文件时实现
             # 在简单的BIOS引导程序中，通常org 0x7C00表示程序将被加载到0x7C00地址执行
@@ -845,6 +831,574 @@ def gen_bios(stmts):
             emit(b'\x75\xf4')          # jnz -10
             # disable speaker
             emit(b'\xb0\x00'); emit(b'\xe6\x61')
+        elif t == "nop":
+            # 生成 nop 指令的机器码
+            emit(b'\x90')  # NOP
+
+        elif t == "cmp":
+            # ("cmp", reg1, reg2/imm)
+            reg1, val = st[1], st[2]
+            
+            # 获取第一个操作数（寄存器）
+            if reg1 in reg8_enc:
+                reg1_type = 8
+                reg1_code = 0xC0 + reg8_enc[reg1] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+            elif reg1 in reg16_enc:
+                reg1_type = 16
+                reg1_code = 0xC0 + reg16_enc[reg1] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+            else:
+                raise ValueError("Unsupported register for cmp: " + reg1)
+            
+            # 处理第二个操作数（立即数或寄存器）
+            try:
+                # 尝试解析为立即数
+                imm = int(val)
+                if reg1_type == 8:
+                    emit(b'\x80')  # 8位比较
+                    emit(bytes([reg1_code]))
+                    emit(bytes([imm & 0xff]))
+                else:
+                    emit(b'\x81')  # 16位比较
+                    emit(bytes([reg1_code]))
+                    emit(struct.pack("<H", imm & 0xffff))
+            except ValueError:
+                # 第二个操作数是寄存器
+                if val in reg8_enc:
+                    if reg1_type != 8:
+                        raise ValueError("Cannot compare 8-bit and 16-bit registers")
+                    reg2_code = 0xC0 + reg8_enc[val] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+                    emit(b'\x38')  # CMP r/m8, r8
+                    emit(bytes([reg1_code | (reg2_code >> 3)]))
+                elif val in reg16_enc:
+                    if reg1_type != 16:
+                        raise ValueError("Cannot compare 8-bit and 16-bit registers")
+                    reg2_code = 0xC0 + reg16_enc[val] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+                    emit(b'\x39')  # CMP r/m16, r16
+                    emit(bytes([reg1_code | (reg2_code >> 3)]))
+                else:
+                    raise ValueError("Unsupported register for cmp: " + val)
+
+        elif t == "test":
+            # ("test", reg1, reg2/imm)
+            reg1, val = st[1], st[2]
+            
+            # 获取第一个操作数（寄存器）
+            if reg1 in reg8_enc:
+                reg1_type = 8
+                reg1_code = 0xC0 + reg8_enc[reg1] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+            elif reg1 in reg16_enc:
+                reg1_type = 16
+                reg1_code = 0xC0 + reg16_enc[reg1] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+            else:
+                raise ValueError("Unsupported register for test: " + reg1)
+            
+            # 处理第二个操作数（立即数或寄存器）
+            try:
+                # 尝试解析为立即数
+                imm = int(val)
+                if reg1_type == 8:
+                    emit(b'\xF6')  # 8位测试
+                    emit(bytes([reg1_code]))
+                    emit(bytes([imm & 0xff]))
+                else:
+                    emit(b'\xF7')  # 16位测试
+                    emit(bytes([reg1_code]))
+                    emit(struct.pack("<H", imm & 0xffff))
+            except ValueError:
+                # 第二个操作数是寄存器
+                if val in reg8_enc:
+                    if reg1_type != 8:
+                        raise ValueError("Cannot test 8-bit and 16-bit registers")
+                    reg2_code = 0xC0 + reg8_enc[val] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+                    emit(b'\x84')  # TEST r/m8, r8
+                    emit(bytes([reg1_code | (reg2_code >> 3)]))
+                elif val in reg16_enc:
+                    if reg1_type != 16:
+                        raise ValueError("Cannot test 8-bit and 16-bit registers")
+                    reg2_code = 0xC0 + reg16_enc[val] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+                    emit(b'\x85')  # TEST r/m16, r16
+                    emit(bytes([reg1_code | (reg2_code >> 3)]))
+                else:
+                    raise ValueError("Unsupported register for test: " + val)
+
+        elif t in ["and", "or", "xor"]:
+            # ("and"/"or"/"xor", reg1, reg2/imm)
+            op_type, reg1, val = st[0], st[1], st[2]
+            
+            # 获取第一个操作数（寄存器）
+            if reg1 in reg8_enc:
+                reg1_type = 8
+                reg1_code = 0xC0 + reg8_enc[reg1] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+            elif reg1 in reg16_enc:
+                reg1_type = 16
+                reg1_code = 0xC0 + reg16_enc[reg1] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+            else:
+                raise ValueError("Unsupported register for " + op_type + ": " + reg1)
+            
+            # 处理第二个操作数（立即数或寄存器）
+            try:
+                # 尝试解析为立即数
+                imm = int(val)
+                if reg1_type == 8:
+                    if op_type == "and":
+                        emit(b'\x80')  # 8位 AND
+                    elif op_type == "or":
+                        emit(b'\x80')  # 8位 OR
+                    elif op_type == "xor":
+                        emit(b'\x80')  # 8位 XOR
+                    emit(bytes([reg1_code | 0x04]))  # ModR/M 字节，设置操作码扩展位
+                    emit(bytes([imm & 0xff]))
+                else:
+                    if op_type == "and":
+                        emit(b'\x81')  # 16位 AND
+                    elif op_type == "or":
+                        emit(b'\x81')  # 16位 OR
+                    elif op_type == "xor":
+                        emit(b'\x81')  # 16位 XOR
+                    emit(bytes([reg1_code | 0x04]))  # ModR/M 字节，设置操作码扩展位
+                    emit(struct.pack("<H", imm & 0xffff))
+            except ValueError:
+                # 第二个操作数是寄存器
+                if val in reg8_enc:
+                    if reg1_type != 8:
+                        raise ValueError("Cannot " + op_type + " 8-bit and 16-bit registers")
+                    reg2_code = 0xC0 + reg8_enc[val] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+                    if op_type == "and":
+                        emit(b'\x20')  # AND r/m8, r8
+                    elif op_type == "or":
+                        emit(b'\x08')  # OR r/m8, r8
+                    elif op_type == "xor":
+                        emit(b'\x30')  # XOR r/m8, r8
+                    emit(bytes([reg1_code | (reg2_code >> 3)]))
+                elif val in reg16_enc:
+                    if reg1_type != 16:
+                        raise ValueError("Cannot " + op_type + " 8-bit and 16-bit registers")
+                    reg2_code = 0xC0 + reg16_enc[val] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+                    if op_type == "and":
+                        emit(b'\x21')  # AND r/m16, r16
+                    elif op_type == "or":
+                        emit(b'\x09')  # OR r/m16, r16
+                    elif op_type == "xor":
+                        emit(b'\x31')  # XOR r/m16, r16
+                    emit(bytes([reg1_code | (reg2_code >> 3)]))
+                else:
+                    raise ValueError("Unsupported register for " + op_type + ": " + val)
+
+        elif t == "not":
+            # ("not", reg)
+            reg = st[1]
+            
+            # 获取操作数（寄存器）
+            if reg in reg8_enc:
+                reg_type = 8
+                reg_code = 0xC0 + reg8_enc[reg] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+                emit(b'\xF6')  # NOT r/m8
+            elif reg in reg16_enc:
+                reg_type = 16
+                reg_code = 0xC0 + reg16_enc[reg] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+                emit(b'\xF7')  # NOT r/m16
+            else:
+                raise ValueError("Unsupported register for not: " + reg)
+            
+            emit(bytes([reg_code | 0x02]))  # ModR/M 字节，设置操作码扩展位
+
+        elif t in ["shl", "shr", "sar", "rol", "ror", "rcl", "rcr"]:
+            # ("shl"/"shr"/"sar"/"rol"/"ror"/"rcl"/"rcr", reg, count)
+            op_type, reg, count = st[0], st[1], st[2]
+            
+            # 获取操作数（寄存器）
+            if reg in reg8_enc:
+                reg_type = 8
+                reg_code = 0xC0 + reg8_enc[reg] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+                emit(b'\xD0')  # 移位/旋转操作，8位
+            elif reg in reg16_enc:
+                reg_type = 16
+                reg_code = 0xC0 + reg16_enc[reg] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+                emit(b'\xD1')  # 移位/旋转操作，16位
+            else:
+                raise ValueError("Unsupported register for " + op_type + ": " + reg)
+            
+            # 确定操作码扩展位
+            op_ext = 0
+            if op_type == "shl" or op_type == "rol":
+                op_ext = 0x04  # SHL/ROL 的操作码扩展位
+            elif op_type == "shr" or op_type == "ror":
+                op_ext = 0x05  # SHR/ROR 的操作码扩展位
+            elif op_type == "sar" or op_type == "rcr":
+                op_ext = 0x07  # SAR/RCR 的操作码扩展位
+            elif op_type == "rcl":
+                op_ext = 0x02  # RCL 的操作码扩展位
+            
+            # 处理计数（立即数或 CL 寄存器）
+            try:
+                # 尝试解析为立即数
+                cnt = int(count)
+                if cnt == 1:
+                    # 计数为1，使用 D0/D1 指令
+                    emit(bytes([reg_code | op_ext]))
+                else:
+                    # 计数不为1，使用 D2/D3 指令并设置 CL
+                    emit(b'\xB1')  # MOV CL, imm8
+                    emit(bytes([cnt & 0xff]))
+                    if reg_type == 8:
+                        emit(b'\xD2')  # 移位/旋转操作，8位，计数在 CL 中
+                    else:
+                        emit(b'\xD3')  # 移位/旋转操作，16位，计数在 CL 中
+                    emit(bytes([reg_code | op_ext]))
+            except ValueError:
+                # 计数是 CL 寄存器
+                if count != "cl":
+                    raise ValueError("Unsupported count for " + op_type + ": " + count + ", must be 'cl' or immediate")
+                if reg_type == 8:
+                    emit(b'\xD2')  # 移位/旋转操作，8位，计数在 CL 中
+                else:
+                    emit(b'\xD3')  # 移位/旋转操作，16位，计数在 CL 中
+                emit(bytes([reg_code | op_ext]))
+        elif t in ["je", "jz", "jne", "jnz", "js", "jns", "jo", "jno", "jb", "jc", "jnb", "jnc", "jbe", "ja", "jle", "jg", "jl", "jge", "jp", "jpe", "jnp", "jpo"]:
+            # 条件跳转指令
+            # 格式: ("je"/"jz"/..., label)
+            label = st[1]
+            pos = len(code)
+            
+            # 根据不同的条件跳转类型设置操作码
+            opcodes = {
+                "je": 0x74, "jz": 0x74,      # JE/JZ - Jump if equal/zero
+                "jne": 0x75, "jnz": 0x75,    # JNE/JNZ - Jump if not equal/not zero
+                "js": 0x78,                  # JS - Jump if sign (negative)
+                "jns": 0x79,                 # JNS - Jump if not sign (positive)
+                "jo": 0x70,                  # JO - Jump if overflow
+                "jno": 0x71,                 # JNO - Jump if not overflow
+                "jb": 0x72, "jc": 0x72,      # JB/JC - Jump if below/carry
+                "jnb": 0x73, "jnc": 0x73,    # JBE/JNC - Jump if not below/not carry
+                "jbe": 0x76,                 # JBE - Jump if below or equal
+                "ja": 0x77,                  # JA - Jump if above
+                "jle": 0x7E,                 # JLE - Jump if less or equal
+                "jg": 0x7F,                  # JG - Jump if greater
+                "jl": 0x7C,                  # JL - Jump if less
+                "jge": 0x7D,                 # JGE - Jump if greater or equal
+                "jp": 0x7A, "jpe": 0x7A,     # JP/JPE - Jump if parity/parity even
+                "jnp": 0x7B, "jpo": 0x7B     # JNP/JPO - Jump if not parity/parity odd
+            }
+            
+            opcode = opcodes.get(t)
+            if opcode is None:
+                raise ValueError("Unknown conditional jump: " + t)
+            
+            # 发送跳转指令和占位符
+            emit(bytes([opcode, 0x00]))  # 使用8位相对偏移
+            
+            # 记录修复点，用于后续计算跳转偏移
+            fixups.append(('jz8', pos+1, label))
+
+        elif t in ["push", "pop"]:
+            # 堆栈操作指令
+            # 格式: ("push"/"pop", reg/imm)
+            op_type = t
+            operand = st[1]
+            
+            if op_type == "push":
+                try:
+                    # 尝试解析为立即数
+                    imm = int(operand)
+                    # PUSH imm16 (需要686+处理器)
+                    emit(b'\x68')
+                    emit(struct.pack("<H", imm & 0xffff))
+                except ValueError:
+                    # 操作数是寄存器
+                    if operand in reg16_enc:
+                        # PUSH r16
+                        opcode = 0x50 + (reg16_enc[operand] - 0xB8)
+                        emit(bytes([opcode]))
+                    elif operand in seg_reg_enc:
+                        # PUSH segreg
+                        if operand == "cs":
+                            # PUSH CS 是一个特殊指令
+                            emit(b'\x0E')
+                        else:
+                            opcode = 0x06 + (seg_reg_enc[operand] - 0x06) // 8
+                            emit(bytes([opcode]))
+                    else:
+                        raise ValueError("Unsupported register for push: " + operand)
+            else:  # pop
+                if operand in reg16_enc:
+                    # POP r16
+                    opcode = 0x58 + (reg16_enc[operand] - 0xB8)
+                    emit(bytes([opcode]))
+                elif operand in seg_reg_enc:
+                    # POP segreg (CS 不能被 POP)
+                    if operand == "cs":
+                        raise ValueError("Cannot pop CS register")
+                    opcode = 0x07 + (seg_reg_enc[operand] - 0x06) // 8
+                    emit(bytes([opcode]))
+                else:
+                    raise ValueError("Unsupported register for pop: " + operand)
+
+        elif t in ["clc", "stc", "cmc", "cld", "std", "cli", "sti"]:
+            # 标志操作指令
+            # 格式: ("clc"/"stc"/...)
+            opcodes = {
+                "clc": 0xF8,  # CLC - Clear Carry Flag
+                "stc": 0xF9,  # STC - Set Carry Flag
+                "cmc": 0xF5,  # CMC - Complement Carry Flag
+                "cld": 0xFC,  # CLD - Clear Direction Flag
+                "std": 0xFD,  # STD - Set Direction Flag
+                "cli": 0xFA,  # CLI - Clear Interrupt Flag
+                "sti": 0xFB   # STI - Set Interrupt Flag
+            }
+            
+            opcode = opcodes.get(t)
+            if opcode is None:
+                raise ValueError("Unknown flag operation: " + t)
+            
+            emit(bytes([opcode]))
+
+        elif t in ["inc", "dec"]:
+            # INC/DEC 指令
+            # 格式: ("inc"/"dec", reg)
+            op_type = t
+            reg = st[1]
+            
+            if reg in reg8_enc:
+                # INC/DEC r8
+                if op_type == "inc":
+                    opcode = 0xFE
+                    reg_ext = 0x00
+                else:  # dec
+                    opcode = 0xFE
+                    reg_ext = 0x01
+                
+                reg_code = 0xC0 + reg8_enc[reg] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+                emit(bytes([opcode]))
+                emit(bytes([reg_code | reg_ext]))
+            elif reg in reg16_enc:
+                # INC/DEC r16
+                if op_type == "inc":
+                    opcode = 0x40 + (reg16_enc[reg] - 0xB8)
+                else:  # dec
+                    opcode = 0x48 + (reg16_enc[reg] - 0xB8)
+                
+                emit(bytes([opcode]))
+            else:
+                raise ValueError("Unsupported register for " + op_type + ": " + reg)
+
+        elif t in ["add", "sub", "adc", "sbb"]:
+            # ADD/SUB/ADC/SBB 指令
+            # 格式: ("add"/"sub"/"adc"/"sbb", reg1, reg2/imm)
+            op_type, reg1, val = st[0], st[1], st[2]
+            
+            # 获取第一个操作数（寄存器）
+            if reg1 in reg8_enc:
+                reg1_type = 8
+                reg1_code = 0xC0 + reg8_enc[reg1] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+            elif reg1 in reg16_enc:
+                reg1_type = 16
+                reg1_code = 0xC0 + reg16_enc[reg1] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+            else:
+                raise ValueError("Unsupported register for " + op_type + ": " + reg1)
+            
+            # 处理第二个操作数（立即数或寄存器）
+            try:
+                # 尝试解析为立即数
+                imm = int(val)
+                if reg1_type == 8:
+                    if op_type == "add":
+                        emit(b'\x80')  # 8位 ADD
+                        reg_ext = 0x00
+                    elif op_type == "sub":
+                        emit(b'\x80')  # 8位 SUB
+                        reg_ext = 0x05
+                    elif op_type == "adc":
+                        emit(b'\x80')  # 8位 ADC
+                        reg_ext = 0x02
+                    elif op_type == "sbb":
+                        emit(b'\x80')  # 8位 SBB
+                        reg_ext = 0x03
+                    
+                    emit(bytes([reg1_code | reg_ext]))
+                    emit(bytes([imm & 0xff]))
+                else:
+                    if op_type == "add":
+                        emit(b'\x81')  # 16位 ADD
+                        reg_ext = 0x00
+                    elif op_type == "sub":
+                        emit(b'\x81')  # 16位 SUB
+                        reg_ext = 0x05
+                    elif op_type == "adc":
+                        emit(b'\x81')  # 16位 ADC
+                        reg_ext = 0x02
+                    elif op_type == "sbb":
+                        emit(b'\x81')  # 16位 SBB
+                        reg_ext = 0x03
+                    
+                    emit(bytes([reg1_code | reg_ext]))
+                    emit(struct.pack("<H", imm & 0xffff))
+            except ValueError:
+                # 第二个操作数是寄存器
+                if val in reg8_enc:
+                    if reg1_type != 8:
+                        raise ValueError("Cannot " + op_type + " 8-bit and 16-bit registers")
+                    reg2_code = 0xC0 + reg8_enc[val] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+                    if op_type == "add":
+                        emit(b'\x00')  # ADD r/m8, r8
+                    elif op_type == "sub":
+                        emit(b'\x28')  # SUB r/m8, r8
+                    elif op_type == "adc":
+                        emit(b'\x10')  # ADC r/m8, r8
+                    elif op_type == "sbb":
+                        emit(b'\x18')  # SBB r/m8, r8
+                    
+                    emit(bytes([reg1_code | (reg2_code >> 3)]))
+                elif val in reg16_enc:
+                    if reg1_type != 16:
+                        raise ValueError("Cannot " + op_type + " 8-bit and 16-bit registers")
+                    reg2_code = 0xC0 + reg16_enc[val] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+                    if op_type == "add":
+                        emit(b'\x01')  # ADD r/m16, r16
+                    elif op_type == "sub":
+                        emit(b'\x29')  # SUB r/m16, r16
+                    elif op_type == "adc":
+                        emit(b'\x11')  # ADC r/m16, r16
+                    elif op_type == "sbb":
+                        emit(b'\x19')  # SBB r/m16, r16
+                    
+                    emit(bytes([reg1_code | (reg2_code >> 3)]))
+                else:
+                    raise ValueError("Unsupported register for " + op_type + ": " + val)
+
+        elif t in ["mul", "div", "imul", "idiv"]:
+            # MUL/DIV/IMUL/IDIV 指令
+            # 格式: ("mul"/"div"/"imul"/"idiv", reg)
+            op_type = t
+            reg = st[1]
+            
+            # 获取操作数（寄存器）
+            if reg in reg8_enc:
+                reg_type = 8
+                reg_code = 0xE0 + reg8_enc[reg] - 0xB0  # 将寄存器编码转换为 ModR/M 格式
+            elif reg in reg16_enc:
+                reg_type = 16
+                reg_code = 0xE0 + reg16_enc[reg] - 0xB8  # 将寄存器编码转换为 ModR/M 格式
+            else:
+                raise ValueError("Unsupported register for " + op_type + ": " + reg)
+            
+            # 根据操作类型设置操作码
+            if op_type == "mul":
+                opcode = 0xF6 if reg_type == 8 else 0xF7  # MUL r/m8 or MUL r/m16
+                reg_ext = 0x04
+            elif op_type == "div":
+                opcode = 0xF6 if reg_type == 8 else 0xF7  # DIV r/m8 or DIV r/m16
+                reg_ext = 0x06
+            elif op_type == "imul":
+                opcode = 0xF6 if reg_type == 8 else 0xF7  # IMUL r/m8 or IMUL r/m16
+                reg_ext = 0x05
+            elif op_type == "idiv":
+                opcode = 0xF6 if reg_type == 8 else 0xF7  # IDIV r/m8 or IDIV r/m16
+                reg_ext = 0x07
+            else:
+                raise ValueError("Unknown operation: " + op_type)
+            
+            emit(bytes([opcode]))
+            emit(bytes([reg_code | reg_ext]))
+
+        elif t in ["call", "ret", "iret"]:
+            # 调用和返回指令
+            if t == "call":
+                # 格式: ("call", label/reg/imm)
+                target = st[1]
+                
+                try:
+                    # 尝试解析为立即数（绝对地址）
+                    addr = int(target)
+                    # CALL abs16 (需要686+处理器)
+                    emit(b'\x9A')
+                    emit(struct.pack("<H", addr & 0xffff))
+                    emit(struct.pack("<H", 0))  # 段地址，暂时设为0
+                except ValueError:
+                    # 目标是标签或寄存器
+                    if target in reg16_enc:
+                        # CALL r16
+                        reg_code = 0xD0 + reg16_enc[target] - 0xB8
+                        emit(bytes([0xFF, reg_code]))
+                    else:
+                        # 目标是标签
+                        pos = len(code)
+                        emit(b'\xE8\x00\x00')  # CALL rel16 placeholder
+                        fixups.append((pos, target))
+            elif t == "ret":
+                # RET 指令
+                emit(b'\xC3')
+            elif t == "iret":
+                # IRET 指令
+                emit(b'\xCF')
+
+        elif t in ["loop", "loope", "loopne"]:
+            # 循环指令
+            # 格式: ("loop"/"loope"/"loopne", label)
+            label = st[1]
+            pos = len(code)
+            
+            # 根据不同的循环类型设置操作码
+            if t == "loop":
+                opcode = 0xE2  # LOOP
+            elif t == "loope":
+                opcode = 0xE1  # LOOPE/LOOPZ
+            elif t == "loopne":
+                opcode = 0xE0  # LOOPNE/LOOPNZ
+            else:
+                raise ValueError("Unknown loop instruction: " + t)
+            
+            # 发送循环指令和占位符
+            emit(bytes([opcode, 0x00]))  # 使用8位相对偏移
+            
+            # 记录修复点，用于后续计算跳转偏移
+            fixups.append(('jz8', pos+1, label))
+
+        elif t in ["int3", "into", "bound"]:
+            # 特殊中断和边界检查指令
+            if t == "int3":
+                # INT3 指令
+                emit(b'\xCC')
+            elif t == "into":
+                # INTO 指令
+                emit(b'\xCE')
+            elif t == "bound":
+                # BOUND 指令
+                # 格式: ("bound", reg, mem)
+                reg, mem = st[1], st[2]
+                
+                if reg in reg16_enc:
+                    reg_code = 0x60 + reg16_enc[reg] - 0xB8
+                    emit(b'\x62')
+                    emit(bytes([reg_code]))
+                else:
+                    raise ValueError("Unsupported register for bound: " + reg)
+
+        elif t in ["lds", "les", "lss", "lfs", "lgs"]:
+            # 加载远指针指令
+            # 格式: ("lds"/"les"/..., reg, mem)
+            op_type, reg, mem = st[0], st[1], st[2]
+            
+            if reg not in reg16_enc:
+                raise ValueError("Unsupported register for " + op_type + ": " + reg)
+            
+            reg_code = 0x00 + reg16_enc[reg] - 0xB8
+            
+            # 根据操作类型设置操作码
+            if op_type == "lds":
+                opcode = 0xC5
+            elif op_type == "les":
+                opcode = 0xC4
+            elif op_type == "lss":
+                opcode = 0xF2  # 需要386+处理器
+            elif op_type == "lfs":
+                opcode = 0xF4  # 需要386+处理器
+            elif op_type == "lgs":
+                opcode = 0xF5  # 需要386+处理器
+            else:
+                raise ValueError("Unknown load far pointer instruction: " + op_type)
+            
+            emit(bytes([opcode]))
+            emit(bytes([reg_code]))
 
         else:
             # unknown/unsupported statement - ignore or raise
@@ -931,7 +1485,10 @@ def gen_bios(stmts):
                 # else block: just run its statements
                 for s2 in blk_stmts:
                     process_statement(s2)
-                # no extra jump at end (we simply flow to endif)
+                # add jump to endif to skip other branches
+                pos_jmp = len(code)
+                emit(b'\xe9\x00\x00')  # jmp rel16 placeholder
+                fixups.append((pos_jmp, endif_label))
             else:
                 raise ValueError("Unknown block kind: " + str(kind))
 
@@ -951,24 +1508,41 @@ def gen_bios(stmts):
 
     # ---- resolve fixups ----
     # two kinds of fixups: ('jz8', pos, label) or (pos, label) for E9 rel16
-    # First handle E9 rel16 style (tuples with integer pos)
+    # Also handle module function calls: (pos, "module.func")
     for item in list(fixups):
         if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], int):
             pos, label = item
             # 处理特殊标签 "$"（表示当前地址）
             if label == "$":
                 target = pos  # 跳转到当前指令位置（即无限循环）
+            # 处理模块函数调用
+            elif "." in label:
+                module_name, func_name = label.split(".", 1)
+                if module_name not in modules:
+                    raise ValueError(f"Unknown module in fixups: {module_name}")
+                if func_name not in modules[module_name]['functions']:
+                    raise ValueError(f"Unknown function {func_name} in module {module_name}")
+                target = modules[module_name]['functions'][func_name][0]
+            # 处理普通标签
             elif label not in labels:
                 raise ValueError("Unknown label in fixups: " + label)
             else:
                 target = labels[label]
+            
+            # E8 rel16 at pos: code[pos] == 0xE8 ; rel = target - (pos + 3)
+            if code[pos] == 0xE8:  # call指令
+                rel = target - (pos + 3)
+                if rel < -32768 or rel > 32767:
+                    raise ValueError(f"call 跳转太远: {rel} 超过了 16 位有符号范围 (-32768~32767)")
+                code[pos+1:pos+3] = struct.pack("<h", rel)
             # E9 rel16 at pos: code[pos] == 0xE9 ; rel = target - (pos + 3)
-            rel = target - (pos + 3)
-            if rel < -32768 or rel > 32767:
-                raise ValueError(f"jmp 跳转太远: {rel} 超过了 16 位有符号范围 (-32768~32767)")
-            code[pos+1:pos+3] = struct.pack("<h", rel)
+            elif code[pos] == 0xE9:  # jmp指令
+                rel = target - (pos + 3)
+                if rel < -32768 or rel > 32767:
+                    raise ValueError(f"jmp 跳转太远: {rel} 超过了 16 位有符号范围 (-32768~32767)")
+                code[pos+1:pos+3] = struct.pack("<h", rel)
+            
             fixups.remove(item)
-
 
     # Then handle short jz8 fixups stored as ('jz8', pos, label)
     for item in list(fixups):
@@ -994,6 +1568,8 @@ def gen_bios(stmts):
                 # Simpler approach here: we avoid expanding in-place because it's complex.
                 raise ValueError("Branch distance too far for 8-bit jz; label layout too complex for this simple generator.")
             fixups.remove(item)
+
+
 
     # final return
     return bytes(code + data)
