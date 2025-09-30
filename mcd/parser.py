@@ -4,9 +4,17 @@ def parse(tokens):
     while i < len(tokens):
         t, line_num = tokens[i]
         
+        if t == "entel":
+            # entel 语句用于设置目标架构
+            if i+1 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: entel语句缺少架构参数")
+            arch = tokens[i+1][0]
+            if arch not in ["86", "64", "AMD64"]:
+                raise SyntaxError(f"第{line_num}行: 不支持的架构 '{arch}'，支持的架构有: 86, 64, AMD64")
+            stmts.append(("entel", arch))
+            i += 2
 
-
-        if t == "int":  # 变量声明
+        elif t == "int":  # 变量声明
             if i+2 >= len(tokens):
                 raise SyntaxError(f"第{line_num}行: 变量声明不完整")
             name = tokens[i+1][0]
@@ -16,7 +24,7 @@ def parse(tokens):
             # 支持表达式（最多3个token: A op B）
             expr_tokens = []
             j = i+3
-            while j < len(tokens) and tokens[j][0] not in ["int", "print", "exit", "execute", "sa", "tm", "org", "def", "jmp", "bpb", "asm", "if", "elif", "else", "beep"]:
+            while j < len(tokens) and tokens[j][0] not in ["int", "print", "exit", "execute", "sa", "tm", "org", "def", "jmp", "bpb", "asm", "if", "elif", "else", "beep", "entel"]:
                 expr_tokens.append(tokens[j][0])
                 j += 1
             
@@ -386,16 +394,12 @@ def parse(tokens):
                 i += 2  # 跳过 def, 标签名
             stmts.append(("label", label_name))
 
-
-
-
         elif t == "jmp":
             if i+1 >= len(tokens):
                 raise SyntaxError(f"第{line_num}行: jmp语句缺少目标标签")
             target = tokens[i+1][0]
             stmts.append(("jmp", target))
             i += 2
-
 
         elif t == "set_fat12_BPB":
             if i+19 >= len(tokens):
@@ -526,7 +530,7 @@ def parse(tokens):
             if i+1 >= len(tokens):
                 raise SyntaxError(f"第{line_num}行: read_fat12_hdr语句缺少参数")
             # 参数可以是变量名或默认为None
-            if i+2 < len(tokens) and tokens[i+2][0] not in ["int", "print", "exit", "execute", "sa", "tm", "org", "def", "jmp", "bpb", "asm", "if", "elif", "else", "beep", "read_cmos", "read_fat12_hdr", "read_fat16_hdr"]:
+            if i+2 < len(tokens) and tokens[i+2][0] not in ["int", "print", "exit", "execute", "sa", "tm", "org", "def", "jmp", "bpb", "asm", "if", "elif", "else", "beep", "entel", "read_cmos", "read_fat12_hdr", "read_fat16_hdr"]:
                 var_name = tokens[i+1][0]
                 offset = tokens[i+2][0]
                 stmts.append(("read_fat12_hdr", var_name, offset))
@@ -601,7 +605,7 @@ def parse(tokens):
             if i+1 >= len(tokens):
                 raise SyntaxError(f"第{line_num}行: read_fat16_hdr语句缺少参数")
             # 参数可以是变量名或默认为None
-            if i+2 < len(tokens) and tokens[i+2][0] not in ["int", "print", "exit", "execute", "sa", "tm", "org", "def", "jmp", "bpb", "asm", "if", "elif", "else", "beep", "read_cmos", "read_fat12_hdr", "read_fat16_hdr"]:
+            if i+2 < len(tokens) and tokens[i+2][0] not in ["int", "print", "exit", "execute", "sa", "tm", "org", "def", "jmp", "bpb", "asm", "if", "elif", "else", "beep", "entel", "read_cmos", "read_fat12_hdr", "read_fat16_hdr"]:
                 var_name = tokens[i+1][0]
                 offset = tokens[i+2][0]
                 stmts.append(("read_fat16_hdr", var_name, offset))
@@ -690,7 +694,7 @@ def parse(tokens):
 
         elif t == "return":
             # return可以带一个返回值，也可以不带
-            if i+1 < len(tokens) and tokens[i+1][0] not in ["int", "print", "exit", "execute", "sa", "tm", "org", "def", "jmp", "bpb", "asm", "if", "elif", "else", "beep", "read_cmos", "read_fat12_hdr", "read_fat16_hdr", "return"]:
+            if i+1 < len(tokens) and tokens[i+1][0] not in ["int", "print", "exit", "execute", "sa", "tm", "org", "def", "jmp", "bpb", "asm", "if", "elif", "else", "beep", "entel", "read_cmos", "read_fat12_hdr", "read_fat16_hdr", "return"]:
                 # 有返回值
                 ret_val = tokens[i+1][0]
                 stmts.append(("return", ret_val))
@@ -715,8 +719,6 @@ def parse(tokens):
             # clear_screen语句不需要参数
             stmts.append(("clear_screen",))
             i += 1
-
-
 
         else:
             raise SyntaxError(f"第{line_num}行: 未知语句: {t}")

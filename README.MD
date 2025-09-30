@@ -215,6 +215,7 @@ beep 1000
 - `parser.py`：判断器，将字符分解为语法树
 - `backend_bios.py`：后端，将语法树转换为BIOS兼容的机器码
 - `backend_linux.py`：后端，将语法树转换为Linux兼容的机器码
+- `backend_win.py`：后端，将语法树转换为Windows兼容的机器码
 
 ## 许可证
 
@@ -228,3 +229,5 @@ beep 1000
 如果您有任何建议或想要贡献代码，请随时提交Pull Request或创建Issue。
 
 文件位置：[README.md](README.md)
+
+总行:4265

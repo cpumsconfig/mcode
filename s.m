@@ -1,6 +1,2 @@
-org 0x7c00
-
 print "8848"
-
-sa 0x55,0xaa
-tm 512-$
+return 0

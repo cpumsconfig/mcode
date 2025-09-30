@@ -29,7 +29,7 @@ def create_dos_header():
     dos_header.extend(struct.pack('<I', 0x00000080))  # e_lfanew (PE头偏移)
     return dos_header
 
-def create_nt_headers(entry_point, code_size, data_size):
+def create_nt_headers(entry_point, code_size, data_size, machine_type=0x8664):
     """创建NT头"""
     nt_headers = bytearray()
     
@@ -37,79 +37,72 @@ def create_nt_headers(entry_point, code_size, data_size):
     nt_headers.extend(struct.pack('<I', 0x00004550))  # PE00
     
     # 文件头
-    nt_headers.extend(struct.pack('<H', 0x014C))    # Machine (i386)
+    nt_headers.extend(struct.pack('<H', machine_type))    # Machine (根据架构设置)
     nt_headers.extend(struct.pack('<H', 0x0002))    # NumberOfSections
     nt_headers.extend(struct.pack('<I', 0x00000000))  # TimeDateStamp
     nt_headers.extend(struct.pack('<I', 0x00000000))  # PointerToSymbolTable
     nt_headers.extend(struct.pack('<I', 0x00000000))  # NumberOfSymbols
-    nt_headers.extend(struct.pack('<H', 0x00E0))    # SizeOfOptionalHeader
-    nt_headers.extend(struct.pack('<H', 0x0102))    # Characteristics (EXECUTABLE_IMAGE | 32BIT_MACHINE)
+    nt_headers.extend(struct.pack('<H', 0x00F0))    # SizeOfOptionalHeader
+    nt_headers.extend(struct.pack('<H', 0x0022))    # Characteristics
     
     # 可选头
-    nt_headers.extend(struct.pack('<H', 0x010B))    # Magic (PE32)
+    nt_headers.extend(struct.pack('<H', 0x020B))    # Magic (PE32+)
     nt_headers.extend(struct.pack('<B', 0x06))      # MajorLinkerVersion
     nt_headers.extend(struct.pack('<B', 0x00))      # MinorLinkerVersion
     nt_headers.extend(struct.pack('<I', code_size))  # SizeOfCode
     nt_headers.extend(struct.pack('<I', data_size))  # SizeOfInitializedData
+
     nt_headers.extend(struct.pack('<I', 0x00000000))  # SizeOfUninitializedData
     nt_headers.extend(struct.pack('<I', entry_point))  # AddressOfEntryPoint
     nt_headers.extend(struct.pack('<I', 0x00001000))  # BaseOfCode
     nt_headers.extend(struct.pack('<I', 0x00002000))  # BaseOfData
-    nt_headers.extend(struct.pack('<I', 0x00400000))  # ImageBase
+    nt_headers.extend(struct.pack('<Q', 0x0000000140000000))  # ImageBase
     nt_headers.extend(struct.pack('<I', 0x00001000))  # SectionAlignment
     nt_headers.extend(struct.pack('<I', 0x00000200))  # FileAlignment
-    nt_headers.extend(struct.pack('<H', 0x0006))    # MajorOperatingSystemVersion (Windows 10/11)
+    nt_headers.extend(struct.pack('<H', 0x0006))    # MajorOperatingSystemVersion
     nt_headers.extend(struct.pack('<H', 0x0000))    # MinorOperatingSystemVersion
     nt_headers.extend(struct.pack('<H', 0x0000))    # MajorImageVersion
     nt_headers.extend(struct.pack('<H', 0x0000))    # MinorImageVersion
-    nt_headers.extend(struct.pack('<H', 0x0006))    # MajorSubsystemVersion (Windows 10/11)
+    nt_headers.extend(struct.pack('<H', 0x0006))    # MajorSubsystemVersion
     nt_headers.extend(struct.pack('<H', 0x0000))    # MinorSubsystemVersion
     nt_headers.extend(struct.pack('<I', 0x00000000))  # Win32VersionValue
     nt_headers.extend(struct.pack('<I', 0x00003000))  # SizeOfImage
     nt_headers.extend(struct.pack('<I', 0x00000200))  # SizeOfHeaders
     nt_headers.extend(struct.pack('<I', 0x00000000))  # CheckSum
     nt_headers.extend(struct.pack('<H', 0x0003))    # Subsystem (Windows Console)
-    nt_headers.extend(struct.pack('<H', 0x8140))    # DllCharacteristics (NX compatible, No SEH, Dynamic base)
-    nt_headers.extend(struct.pack('<I', 0x00100000))  # SizeOfStackReserve
-    nt_headers.extend(struct.pack('<I', 0x00001000))  # SizeOfStackCommit
-    nt_headers.extend(struct.pack('<I', 0x00100000))  # SizeOfHeapReserve
-    nt_headers.extend(struct.pack('<I', 0x00001000))  # SizeOfHeapCommit
+    nt_headers.extend(struct.pack('<H', 0x8160))    # DllCharacteristics
+    
+    # 64位特定的堆栈和堆设置
+    nt_headers.extend(struct.pack('<Q', 0x00100000))  # SizeOfStackReserve
+    nt_headers.extend(struct.pack('<Q', 0x00001000))  # SizeOfStackCommit
+    nt_headers.extend(struct.pack('<Q', 0x00100000))  # SizeOfHeapReserve
+    nt_headers.extend(struct.pack('<Q', 0x00001000))  # SizeOfHeapCommit
+    
     nt_headers.extend(struct.pack('<I', 0x00000000))  # LoaderFlags
     nt_headers.extend(struct.pack('<I', 0x00000010))  # NumberOfRvaAndSizes
     
-    # 数据目录 - 添加导入表
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Export Table
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00002000))  # Import Table (在数据段)
-    nt_headers.extend(struct.pack('<I', 0x00000050))  # Import Table大小
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Resource Table
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Exception Table
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Certificate Table
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Base Relocation Table
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Debug
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Architecture
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Global Ptr
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # TLS Table
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Load Config Table
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Bound Import
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # IAT
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Delay Import Descriptor
-    nt_headers.extend(struct.pack('<I', 0x00000000))
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # CLR Runtime Header
-    nt_headers.extend(struct.pack('<I', 0x00000000))
+    # 数据目录
+    # 导入表
+    nt_headers.extend(struct.pack('<I', 0x00000000))  # Export Table RVA
+    nt_headers.extend(struct.pack('<I', 0x00000000))  # Export Table Size
+    nt_headers.extend(struct.pack('<I', 0x00002000))  # Import Table RVA
+    nt_headers.extend(struct.pack('<I', 0x00000064))  # Import Table Size
+    nt_headers.extend(struct.pack('<I', 0x00000000))  # Resource Table RVA
+    nt_headers.extend(struct.pack('<I', 0x00000000))  # Resource Table Size
+    nt_headers.extend(struct.pack('<I', 0x00000000))  # Exception Table RVA
+    nt_headers.extend(struct.pack('<I', 0x00000000))  # Exception Table Size
+    nt_headers.extend(struct.pack('<I', 0x00000000))  # Certificate Table RVA
+    nt_headers.extend(struct.pack('<I', 0x00000000))  # Certificate Table Size
+    nt_headers.extend(struct.pack('<I', 0x00000000))  # Base Relocation Table RVA
+    nt_headers.extend(struct.pack('<I', 0x00000000))  # Base Relocation Table Size
+    
+    # 填充剩余的数据目录项
+    for _ in range(9):
+        nt_headers.extend(struct.pack('<I', 0x00000000))  # RVA
+        nt_headers.extend(struct.pack('<I', 0x00000000))  # Size
     
     return nt_headers
+
 
 def create_section_header(name, vsize, vaddr, size, raw, flags):
     """创建节区头"""
@@ -129,7 +122,7 @@ def create_section_header(name, vsize, vaddr, size, raw, flags):
 def align_up(x, align):
     return (x + align - 1) & ~(align - 1)
 
-def make_pe(code, data):
+def make_pe(code, data, machine_type=0x8664):
     """创建PE文件"""
     file_align = 0x200
     section_align = 0x1000
@@ -139,7 +132,7 @@ def make_pe(code, data):
 
     # DOS + NT
     dos_header = create_dos_header()
-    nt_headers = create_nt_headers(entry_point, len(code), len(data))
+    nt_headers = create_nt_headers(entry_point, len(code), len(data), machine_type)
 
     # 节表
     section_table = bytearray()
@@ -155,16 +148,17 @@ def make_pe(code, data):
 
     code_section = create_section_header(
         b'.text',
-        code_vsize,
+        code_vsize,  # 确保这个值正确
         code_rva,
         code_rawsize,
         code_raw,
-        0x60000020  # 可执行 | 可读 | 代码
+        0x60000020
     )
+
     section_table += code_section
 
     # ---- 数据节 ----
-    data_rva = align_up(code_rva + code_vsize, section_align)
+    data_rva = align_up(code_rva + code_rawsize, section_align)
     data_raw = code_raw + code_rawsize
     data_vsize = len(data)
     data_rawsize = align_up(len(data), file_align)
@@ -180,7 +174,7 @@ def make_pe(code, data):
     section_table += data_section
 
     # 更新 SizeOfImage
-    size_of_image = align_up(data_rva + data_vsize, section_align)
+    size_of_image = align_up(data_rva + data_rawsize, section_align)
     nt_headers[0x50:0x54] = struct.pack('<I', size_of_image)  # 修改 SizeOfImage
     nt_headers[0x54:0x58] = struct.pack('<I', headers_size)   # 修改 SizeOfHeaders
 
@@ -200,7 +194,7 @@ def gen_windows(stmts):
     """
     生成Windows PE格式的机器代码
     支持: let, print_str, print_var, exit, mov, int, asm, if, elif, else, op (32-bit),
-          while, for, import, global, extern, cli, sti, hlt, call, return
+          while, for, import, global, extern, cli, sti, hlt, call, return, entel
     """
     variables = {}
     labels = {}          # name -> code offset
@@ -209,6 +203,13 @@ def gen_windows(stmts):
     data = bytearray()
     unique_id = 0
     
+    # 架构设置 - 默认为64位
+    architecture = "AMD64"  # 可以是 "86", "64", "AMD64"
+    machine_type = 0x8664   # AMD64 的机器类型
+    
+    # 设置程序入口点
+    entry_point = len(code)
+
     # 模块系统相关
     modules = {}        # 已导入的模块
     global_funcs = {}   # 全局函数：name -> (code_offset, param_count)
@@ -318,8 +319,21 @@ def gen_windows(stmts):
 
     # top-level statement processor (handles a single stmt)
     def process_statement(st):
+        nonlocal architecture, machine_type
         t = st[0]
-        if t == "let":
+        if t == "entel":
+            # 设置目标架构
+            arch = st[1].upper()
+            if arch in ["86", "32", "X86"]:
+                architecture = "X86"
+                machine_type = 0x014C  # IMAGE_FILE_MACHINE_I386
+            elif arch in ["64", "AMD64", "X64"]:
+                architecture = "AMD64"
+                machine_type = 0x8664  # IMAGE_FILE_MACHINE_AMD64
+            else:
+                raise ValueError(f"不支持的架构: {arch}，支持的架构有: 86, 64, AMD64")
+
+        elif t == "let":
             # st = ("let", name, value)
             name, val = st[1], st[2]
             # if val is int -> const; else if string "mem" or none -> allocate mem
@@ -1056,26 +1070,55 @@ def gen_windows(stmts):
             
             fixups.remove(item)
     
-        # === 修复 fixups ===
+    # === 修复 fixups ===
     for kind, pos, target in fixups:
         if kind == "call":
             # 内部函数调用
             if target not in labels:
                 raise ValueError(f"Undefined function label: {target}")
             addr = labels[target]
-            rel = addr - (pos + 4)  # E8 相对跳转
-            code = code[:pos] + struct.pack("<i", rel) + code[pos+4:]
-
+            rel = addr - (pos + 5)  # E8 相对跳转，修正偏移计算
+            code[pos:pos+5] = b'\xe8' + struct.pack("<i", rel)
+        elif kind == "jmp":
+            # 无条件跳转
+            if target not in labels:
+                raise ValueError(f"Undefined label: {target}")
+            addr = labels[target]
+            rel = addr - (pos + 5)  # E9 相对跳转，修正偏移计算
+            code[pos:pos+5] = b'\xe9' + struct.pack("<i", rel)
+        elif kind == "jz":
+            # 条件跳转 (等于)
+            if target not in labels:
+                raise ValueError(f"Undefined label: {target}")
+            addr = labels[target]
+            rel = addr - (pos + 6)  # 0F 84 相对跳转，修正偏移计算
+            code[pos:pos+6] = b'\x0f\x84' + struct.pack("<i", rel)
+        elif kind == "jnz":
+            # 条件跳转 (不等于)
+            if target not in labels:
+                raise ValueError(f"Undefined label: {target}")
+            addr = labels[target]
+            rel = addr - (pos + 6)  # 0F 85 相对跳转，修正偏移计算
+            code[pos:pos+6] = b'\x0f\x85' + struct.pack("<i", rel)
+        elif kind == "jg":
+            # 条件跳转 (大于)
+            if target not in labels:
+                raise ValueError(f"Undefined label: {target}")
+            addr = labels[target]
+            rel = addr - (pos + 6)  # 0F 8F 相对跳转，修正偏移计算
+            code[pos:pos+6] = b'\x0f\x8f' + struct.pack("<i", rel)
         elif kind == "fixup":
             # 外部函数调用（API）
-            if target not in api_addresses:
-                raise ValueError(f"Undefined extern function: {target}")
-            addr = api_addresses[target]
-            code = code[:pos] + struct.pack("<I", addr) + code[pos+4:]
-
+            if target in api_addresses:
+                addr = api_addresses[target]
+                code[pos:pos+4] = struct.pack("<I", addr)
+            elif target in string_addresses:
+                addr = string_addresses[target]
+                code[pos:pos+4] = struct.pack("<I", addr)
+            else:
+                raise ValueError(f"Undefined extern function or string: {target}")
         else:
             raise ValueError(f"Unknown fixup type: {kind}")
 
-
-    # 返回生成的PE文件
-    return make_pe(code, data)
+    # 返回生成的PE文件，传递机器类型
+    return make_pe(code, data, machine_type)
