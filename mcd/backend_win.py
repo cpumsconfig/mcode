@@ -27,9 +27,15 @@ def create_dos_header():
     dos_header.extend(struct.pack('<H', 0x0000))  # e_oeminfo
     dos_header.extend(b'\x00' * 20)     # e_res2
     dos_header.extend(struct.pack('<I', 0x00000080))  # e_lfanew (PE头偏移)
+    
+    # 确保DOS头的长度是0x80字节
+    if len(dos_header) < 0x80:
+        dos_header.extend(b'\x00' * (0x80 - len(dos_header)))
+    
     return dos_header
 
-def create_nt_headers(entry_point, code_size, data_size, machine_type=0x8664):
+
+def create_nt_headers(entry_point, code_size, data_size, machine_type=0x8664, import_table_rva=0, import_table_size=0):
     """创建NT头"""
     nt_headers = bytearray()
     
@@ -37,93 +43,125 @@ def create_nt_headers(entry_point, code_size, data_size, machine_type=0x8664):
     nt_headers.extend(struct.pack('<I', 0x00004550))  # PE00
     
     # 文件头
-    nt_headers.extend(struct.pack('<H', machine_type))    # Machine (根据架构设置)
-    nt_headers.extend(struct.pack('<H', 0x0002))    # NumberOfSections
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # TimeDateStamp
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # PointerToSymbolTable
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # NumberOfSymbols
-    nt_headers.extend(struct.pack('<H', 0x00F0))    # SizeOfOptionalHeader
-    nt_headers.extend(struct.pack('<H', 0x0022))    # Characteristics
+    nt_headers.extend(struct.pack('<H', machine_type))  # Machine
+    nt_headers.extend(struct.pack('<H', 3))            # NumberOfSections (改为3个节区)
+    nt_headers.extend(struct.pack('<I', 0))            # TimeDateStamp
+    nt_headers.extend(struct.pack('<I', 0))            # PointerToSymbolTable
+    nt_headers.extend(struct.pack('<I', 0))            # NumberOfSymbols
+    nt_headers.extend(struct.pack('<H', 0xE0))         # SizeOfOptionalHeader
+    nt_headers.extend(struct.pack('<H', 0x0022))       # Characteristics
     
-    # 可选头
-    nt_headers.extend(struct.pack('<H', 0x020B))    # Magic (PE32+)
+    # 可选头 - 根据机器类型设置Magic字段
+    if machine_type == 0x014C:  # IMAGE_FILE_MACHINE_I386 (32位)
+        nt_headers.extend(struct.pack('<H', 0x010B))    # Magic (PE32)
+    else:  # IMAGE_FILE_MACHINE_AMD64 (64位)
+        nt_headers.extend(struct.pack('<H', 0x020B))    # Magic (PE32+)
     nt_headers.extend(struct.pack('<B', 0x06))      # MajorLinkerVersion
     nt_headers.extend(struct.pack('<B', 0x00))      # MinorLinkerVersion
-    nt_headers.extend(struct.pack('<I', code_size))  # SizeOfCode
-    nt_headers.extend(struct.pack('<I', data_size))  # SizeOfInitializedData
-
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # SizeOfUninitializedData
+    nt_headers.extend(struct.pack('<I', 0x100))     # SizeOfCode
+    nt_headers.extend(struct.pack('<I', 0x100))     # SizeOfInitializedData
+    nt_headers.extend(struct.pack('<I', 0))         # SizeOfUninitializedData
     nt_headers.extend(struct.pack('<I', entry_point))  # AddressOfEntryPoint
-    nt_headers.extend(struct.pack('<I', 0x00001000))  # BaseOfCode
-    nt_headers.extend(struct.pack('<I', 0x00002000))  # BaseOfData
-    nt_headers.extend(struct.pack('<Q', 0x0000000140000000))  # ImageBase
-    nt_headers.extend(struct.pack('<I', 0x00001000))  # SectionAlignment
-    nt_headers.extend(struct.pack('<I', 0x00000200))  # FileAlignment
-    nt_headers.extend(struct.pack('<H', 0x0006))    # MajorOperatingSystemVersion
-    nt_headers.extend(struct.pack('<H', 0x0000))    # MinorOperatingSystemVersion
-    nt_headers.extend(struct.pack('<H', 0x0000))    # MajorImageVersion
-    nt_headers.extend(struct.pack('<H', 0x0000))    # MinorImageVersion
-    nt_headers.extend(struct.pack('<H', 0x0006))    # MajorSubsystemVersion
-    nt_headers.extend(struct.pack('<H', 0x0000))    # MinorSubsystemVersion
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Win32VersionValue
-    nt_headers.extend(struct.pack('<I', 0x00003000))  # SizeOfImage
-    nt_headers.extend(struct.pack('<I', 0x00000200))  # SizeOfHeaders
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # CheckSum
-    nt_headers.extend(struct.pack('<H', 0x0003))    # Subsystem (Windows Console)
-    nt_headers.extend(struct.pack('<H', 0x8160))    # DllCharacteristics
+    nt_headers.extend(struct.pack('<I', 0x1000))    # BaseOfCode
     
-    # 64位特定的堆栈和堆设置
-    nt_headers.extend(struct.pack('<Q', 0x00100000))  # SizeOfStackReserve
-    nt_headers.extend(struct.pack('<Q', 0x00001000))  # SizeOfStackCommit
-    nt_headers.extend(struct.pack('<Q', 0x00100000))  # SizeOfHeapReserve
-    nt_headers.extend(struct.pack('<Q', 0x00001000))  # SizeOfHeapCommit
+    # 根据机器类型设置BaseOfData和ImageBase
+    if machine_type == 0x014C:  # IMAGE_FILE_MACHINE_I386 (32位)
+        nt_headers.extend(struct.pack('<I', 0x2000))    # BaseOfData
+        nt_headers.extend(struct.pack('<I', 0x00400000))  # ImageBase (32位)
+    else:  # IMAGE_FILE_MACHINE_AMD64 (64位)
+        nt_headers.extend(struct.pack('<Q', 0x0000000140000000))  # ImageBase (64位)
     
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # LoaderFlags
-    nt_headers.extend(struct.pack('<I', 0x00000010))  # NumberOfRvaAndSizes
+    nt_headers.extend(struct.pack('<I', 0x1000))    # SectionAlignment
+    nt_headers.extend(struct.pack('<I', 0x200))     # FileAlignment
+    nt_headers.extend(struct.pack('<H', 4))          # MajorOperatingSystemVersion
+    nt_headers.extend(struct.pack('<H', 0))          # MinorOperatingSystemVersion
+    nt_headers.extend(struct.pack('<H', 0))          # MajorImageVersion
+    nt_headers.extend(struct.pack('<H', 0))          # MinorImageVersion
+    nt_headers.extend(struct.pack('<H', 4))          # MajorSubsystemVersion
+    nt_headers.extend(struct.pack('<H', 0))          # MinorSubsystemVersion
+    nt_headers.extend(struct.pack('<I', 0))          # Win32VersionValue
+    nt_headers.extend(struct.pack('<I', 0x4000))    # SizeOfImage (增加大小以容纳导入表)
+    nt_headers.extend(struct.pack('<I', 0x200))     # SizeOfHeaders
+    nt_headers.extend(struct.pack('<I', 0))          # CheckSum
+    nt_headers.extend(struct.pack('<H', 2))          # Subsystem (Windows GUI)
+    nt_headers.extend(struct.pack('<H', 0))          # DllCharacteristics
+    
+    # 根据机器类型设置堆栈和堆
+    if machine_type == 0x014C:  # IMAGE_FILE_MACHINE_I386 (32位)
+        nt_headers.extend(struct.pack('<I', 0x00100000))  # SizeOfStackReserve
+        nt_headers.extend(struct.pack('<I', 0x00001000))  # SizeOfStackCommit
+        nt_headers.extend(struct.pack('<I', 0x00100000))  # SizeOfHeapReserve
+        nt_headers.extend(struct.pack('<I', 0x00001000))  # SizeOfHeapCommit
+    else:  # IMAGE_FILE_MACHINE_AMD64 (64位)
+        nt_headers.extend(struct.pack('<Q', 0x00100000))  # SizeOfStackReserve
+        nt_headers.extend(struct.pack('<Q', 0x00001000))  # SizeOfStackCommit
+        nt_headers.extend(struct.pack('<Q', 0x00100000))  # SizeOfHeapReserve
+        nt_headers.extend(struct.pack('<Q', 0x00001000))  # SizeOfHeapCommit
+    
+    nt_headers.extend(struct.pack('<I', 0))          # LoaderFlags
+    nt_headers.extend(struct.pack('<I', 16))         # NumberOfRvaAndSizes
     
     # 数据目录
-    # 导入表
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Export Table RVA
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Export Table Size
-    nt_headers.extend(struct.pack('<I', 0x00002000))  # Import Table RVA
-    nt_headers.extend(struct.pack('<I', 0x00000064))  # Import Table Size
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Resource Table RVA
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Resource Table Size
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Exception Table RVA
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Exception Table Size
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Certificate Table RVA
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Certificate Table Size
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Base Relocation Table RVA
-    nt_headers.extend(struct.pack('<I', 0x00000000))  # Base Relocation Table Size
-    
-    # 填充剩余的数据目录项
-    for _ in range(9):
-        nt_headers.extend(struct.pack('<I', 0x00000000))  # RVA
-        nt_headers.extend(struct.pack('<I', 0x00000000))  # Size
+    nt_headers.extend(struct.pack('<I', 0))        # Export Table RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Export Table Size
+    nt_headers.extend(struct.pack('<I', import_table_rva))  # Import Table RVA
+    nt_headers.extend(struct.pack('<I', import_table_size))  # Import Table Size
+    nt_headers.extend(struct.pack('<I', 0))        # Resource Table RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Resource Table Size
+    nt_headers.extend(struct.pack('<I', 0))        # Exception Table RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Exception Table Size
+    nt_headers.extend(struct.pack('<I', 0))        # Certificate Table RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Certificate Table Size
+    nt_headers.extend(struct.pack('<I', 0))        # Base Relocation Table RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Base Relocation Table Size
+    nt_headers.extend(struct.pack('<I', 0))        # Debug RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Debug Size
+    nt_headers.extend(struct.pack('<I', 0))        # Architecture RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Architecture Size
+    nt_headers.extend(struct.pack('<I', 0))        # Global Ptr RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Global Ptr Size
+    nt_headers.extend(struct.pack('<I', 0))        # TLS Table RVA
+    nt_headers.extend(struct.pack('<I', 0))        # TLS Table Size
+    nt_headers.extend(struct.pack('<I', 0))        # Load Config Table RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Load Config Table Size
+    nt_headers.extend(struct.pack('<I', 0))        # Bound Import RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Bound Import Size
+    nt_headers.extend(struct.pack('<I', import_table_rva + 0x40))  # IAT RVA (跟随导入表)
+    nt_headers.extend(struct.pack('<I', 0))        # IAT Size
+    nt_headers.extend(struct.pack('<I', 0))        # Delay Import Descriptor RVA
+    nt_headers.extend(struct.pack('<I', 0))        # Delay Import Descriptor Size
+    nt_headers.extend(struct.pack('<I', 0))        # COM+ Runtime Header RVA
+    nt_headers.extend(struct.pack('<I', 0))        # COM+ Runtime Header Size
+    nt_headers.extend(struct.pack('<I', 0))        # Reserved
+    nt_headers.extend(struct.pack('<I', 0))        # Reserved
     
     return nt_headers
 
 
-def create_section_header(name, vsize, vaddr, size, raw, flags):
+def create_section_header(name, size, va, characteristics, raw, flags):
     """创建节区头"""
     section_header = bytearray()
-    section_header.extend(name.ljust(8, b'\x00')[:8])  # Name
-    section_header.extend(struct.pack('<I', vsize))   # VirtualSize
-    section_header.extend(struct.pack('<I', vaddr))   # VirtualAddress
-    section_header.extend(struct.pack('<I', size))    # SizeOfRawData
-    section_header.extend(struct.pack('<I', raw))     # PointerToRawData
-    section_header.extend(struct.pack('<I', 0))       # PointerToRelocations
-    section_header.extend(struct.pack('<I', 0))       # PointerToLinenumbers
-    section_header.extend(struct.pack('<H', 0))       # NumberOfRelocations
-    section_header.extend(struct.pack('<H', 0))       # NumberOfLinenumbers
-    section_header.extend(struct.pack('<I', flags))   # Characteristics
+    section_header.extend(name.ljust(8, '\x00')[:8].encode('ascii'))  # Name
+    section_header.extend(struct.pack('<I', size))  # VirtualSize
+    section_header.extend(struct.pack('<I', va))  # VirtualAddress
+    section_header.extend(struct.pack('<I', size))  # SizeOfRawData
+    section_header.extend(struct.pack('<I', raw))  # PointerToRawData
+    section_header.extend(struct.pack('<I', 0))  # PointerToRelocations
+    section_header.extend(struct.pack('<I', 0))  # PointerToLinenumbers
+    section_header.extend(struct.pack('<H', 0))  # NumberOfRelocations
+    section_header.extend(struct.pack('<H', 0))  # NumberOfLinenumbers
+    section_header.extend(struct.pack('<I', characteristics))  # Characteristics
     return section_header
+
 
 def align_up(x, align):
     return (x + align - 1) & ~(align - 1)
 
-def make_pe(code, data, machine_type=0x8664):
+def make_pe(code, data, machine_type=0x8664, imported_functions=None):
     """创建PE文件"""
+    if imported_functions is None:
+        imported_functions = []
+        
     file_align = 0x200
     section_align = 0x1000
 
@@ -132,62 +170,137 @@ def make_pe(code, data, machine_type=0x8664):
 
     # DOS + NT
     dos_header = create_dos_header()
-    nt_headers = create_nt_headers(entry_point, len(code), len(data), machine_type)
+    
+    # 创建导入表
+    import_table = bytearray()
+    import_descriptor_size = 20  # 每个导入描述符的大小
+    
+    # 按DLL分组导入函数
+    dll_groups = {}
+    for dll_name, func_name in imported_functions:
+        if dll_name not in dll_groups:
+            dll_groups[dll_name] = []
+        dll_groups[dll_name].append(func_name)
+    
+    # 为每个DLL创建导入描述符
+    dll_names = bytearray()
+    hint_name_table = bytearray()
+    iat = bytearray()
+    
+    current_rva = 0x2000  # 导入表的起始RVA
+    
+    # 计算各部分的RVA
+    import_table_rva = current_rva
+    dll_names_rva = import_table_rva + len(import_table) + len(dll_groups) * import_descriptor_size
+    hint_name_table_rva = dll_names_rva + len(dll_names)
+    iat_rva = hint_name_table_rva + len(hint_name_table)
+    
+    for dll_name, func_names in dll_groups.items():
+        # DLL名称表
+        dll_name_rva = dll_names_rva + len(dll_names)
+        dll_names.extend(dll_name.encode('ascii') + b'\x00')
+        
+        # Hint/Name表
+        hint_name_rvas = []
+        for func_name in func_names:
+            hint_name_rva = hint_name_table_rva + len(hint_name_table)
+            hint_name_rvas.append(hint_name_rva)
+            hint_name_table.extend(struct.pack('<H', 0))  # Hint
+            hint_name_table.extend(func_name.encode('ascii') + b'\x00')
+        
+        # IAT
+        for hint_name_rva in hint_name_rvas:
+            iat.extend(struct.pack('<I', hint_name_rva))
+        iat.extend(struct.pack('<I', 0))  # 结束标记
+        
+        # 导入描述符
+        import_table.extend(struct.pack('<I', hint_name_table_rva))  # OriginalFirstThunk (指向Hint/Name表)
+        import_table.extend(struct.pack('<I', 0))  # TimeDateStamp
+        import_table.extend(struct.pack('<I', 0))  # ForwarderChain
+        import_table.extend(struct.pack('<I', dll_name_rva))  # Name
+        import_table.extend(struct.pack('<I', iat_rva))  # FirstThunk (指向IAT)
+        
+        # 更新IAT的RVA
+        iat_rva += len(func_names) * 4 + 4  # 每个函数4字节，加上结束标记
+    
+    # 添加结束标记
+    import_table.extend(b'\x00' * 20)
+    
+    # 计算导入表的总大小
+    import_table_size = len(import_table) + len(dll_names) + len(hint_name_table) + len(iat)
+    
+    # 创建NT头
+    nt_headers = create_nt_headers(entry_point, len(code), len(data), machine_type, 
+                                  import_table_rva, import_table_size)
 
     # 节表
     section_table = bytearray()
 
     # headers 大小（对齐到 FileAlignment）
-    headers_size = align_up(len(dos_header) + len(nt_headers) + 2*40, file_align)
-
-    # ---- 代码节 ----
-    code_rva = 0x1000
-    code_raw = headers_size
-    code_vsize = len(code)
-    code_rawsize = align_up(len(code), file_align)
-
-    code_section = create_section_header(
-        b'.text',
-        code_vsize,  # 确保这个值正确
-        code_rva,
-        code_rawsize,
-        code_raw,
-        0x60000020
-    )
-
-    section_table += code_section
-
-    # ---- 数据节 ----
-    data_rva = align_up(code_rva + code_rawsize, section_align)
-    data_raw = code_raw + code_rawsize
-    data_vsize = len(data)
-    data_rawsize = align_up(len(data), file_align)
-
-    data_section = create_section_header(
-        b'.data',
-        data_vsize,
-        data_rva,
-        data_rawsize,
-        data_raw,
-        0xC0000040  # 可读 | 可写 | 已初始化数据
-    )
-    section_table += data_section
-
-    # 更新 SizeOfImage
-    size_of_image = align_up(data_rva + data_rawsize, section_align)
-    nt_headers[0x50:0x54] = struct.pack('<I', size_of_image)  # 修改 SizeOfImage
-    nt_headers[0x54:0x58] = struct.pack('<I', headers_size)   # 修改 SizeOfHeaders
-
+    headers_size = align_up(len(dos_header) + len(nt_headers) + 3*40, file_align)
+    
     # ---- 拼接文件 ----
-    pe_file = dos_header + nt_headers + section_table
+    pe_file = bytearray()
+    
+    # 添加DOS头
+    pe_file.extend(dos_header)
+    
+    # 添加NT头（包括PE签名）
+    pe_file.extend(nt_headers)
+    
+    # 添加节表
+    pe_file.extend(section_table)
+    
+    # 填充到headers_size
     pe_file = pe_file.ljust(headers_size, b'\x00')
-
-    # 代码
-    pe_file[code_raw:code_raw+len(code)] = code
-    # 数据
-    pe_file[data_raw:data_raw+len(data)] = data
-
+    
+    # 创建.text节区（代码）
+    text_section = bytearray()
+    text_section.extend(code)
+    text_section = text_section.ljust(align_up(len(text_section), file_align), b'\x00')
+    
+    # 创建.data节区（数据）
+    data_section = bytearray()
+    data_section.extend(data)
+    data_section = data_section.ljust(align_up(len(data_section), file_align), b'\x00')
+    
+    # 创建.idata节区（导入表）
+    idata_section = bytearray()
+    
+    # 确保导入表从RVA 0x2000开始
+    idata_section.extend(b'\x00' * (import_table_rva - (headers_size + len(text_section) + len(data_section))))
+    
+    # 添加导入表、DLL名称、Hint/Name表和IAT
+    idata_section.extend(import_table)
+    idata_section.extend(dll_names)
+    idata_section.extend(hint_name_table)
+    idata_section.extend(iat)
+    
+    # 对齐到文件对齐边界
+    idata_section = idata_section.ljust(align_up(len(idata_section), file_align), b'\x00')
+    
+    # 计算节区在文件中的偏移
+    text_raw = headers_size
+    data_raw = text_raw + len(text_section)
+    idata_raw = data_raw + len(data_section)
+    
+    # 添加节表项
+    section_table.extend(create_section_header(".text", len(text_section), 0x1000, 0x60000020, text_raw, 0x00000020))
+    section_table.extend(create_section_header(".data", len(data_section), 0x2000, 0xC0000040, data_raw, 0x00000040))
+    section_table.extend(create_section_header(".idata", len(idata_section), import_table_rva, 0xC0000040, idata_raw, 0x00000080))
+    
+    # 重新构建PE文件，包含节表
+    pe_file = bytearray()
+    pe_file.extend(dos_header)
+    pe_file.extend(nt_headers)
+    pe_file.extend(section_table)
+    pe_file = pe_file.ljust(headers_size, b'\x00')
+    pe_file.extend(text_section)
+    pe_file.extend(data_section)
+    pe_file.extend(idata_section)
+    
     return pe_file
+
 
 
 def gen_windows(stmts):
@@ -215,20 +328,8 @@ def gen_windows(stmts):
     global_funcs = {}   # 全局函数：name -> (code_offset, param_count)
     extern_funcs = {}   # 外部函数：name -> (module_name, func_name)
     
-    # API地址表 - 使用简化的方式
-    # 注意：这些地址是Windows 10/11中的典型地址，但实际地址可能因系统版本和更新而异
-    # 在实际应用中，应该使用导入表而不是硬编码地址
-    api_addresses = {
-        'ExitProcess': 0x76F0DAD0,      # kernel32.dll中的ExitProcess地址 (Windows 10/11)
-        'MessageBoxA': 0x756A1A60,      # user32.dll中的MessageBoxA地址 (Windows 10/11)
-        'CreateFileA': 0x76EFC4A0,      # kernel32.dll中的CreateFileA地址 (Windows 10/11)
-        'ReadFile': 0x76EFB3D0,         # kernel32.dll中的ReadFile地址 (Windows 10/11)
-        'CloseHandle': 0x76EFB7B0,      # kernel32.dll中的CloseHandle地址 (Windows 10/11)
-        'MessageBeep': 0x756A1B70,      # user32.dll中的MessageBeep地址 (Windows 10/11)
-        'caption': 0x00402000,          # 数据段中的偏移量
-        'filename': 0x00402010,         # 数据段中的偏移量
-        'buffer': 0x00402020            # 数据段中的偏移量
-    }
+    # 收集需要导入的函数
+    imported_functions = set()
     
     # 字符串地址表
     string_addresses = {}
@@ -355,6 +456,9 @@ def gen_windows(stmts):
             string_id = f'string_{len(code)}'
             string_addresses[string_id] = 0x00402000 + str_addr
             
+            # 添加到导入函数列表
+            imported_functions.add(('user32.dll', 'MessageBoxA'))
+            
             # 调用MessageBoxA
             # 参数: hWnd=0, lpText=字符串地址, lpCaption="Output", uType=0
             emit(b'\x6a\x00')              # push 0 (uType)
@@ -398,6 +502,9 @@ def gen_windows(stmts):
                 # 现在ECX指向转换后的字符串
                 emit(b'\x51')  # push ecx
                 
+                # 添加到导入函数列表
+                imported_functions.add(('user32.dll', 'MessageBoxA'))
+                
                 # 调用MessageBoxA
                 emit(b'\x6a\x00')              # push 0 (uType)
                 emit(b'\x68\x00\x00\x00\x00')  # push "Output"
@@ -411,6 +518,9 @@ def gen_windows(stmts):
                 emit(b'\xff\xd0')              # call eax
 
         elif t == "exit":
+            # 添加到导入函数列表
+            imported_functions.add(('kernel32.dll', 'ExitProcess'))
+            
             # 在Windows中，使用ExitProcess退出程序
             emit(b'\x6a' + bytes([st[1] & 0xff]))  # push exit_code
             emit(b'\xb8\x00\x00\x00\x00')  # mov eax, ExitProcess
@@ -569,6 +679,9 @@ def gen_windows(stmts):
             emit(b'\xfb')  # STI
 
         elif t == "hlt":
+            # 添加到导入函数列表
+            imported_functions.add(('kernel32.dll', 'ExitProcess'))
+            
             # 在Windows用户空间中，HLT指令会导致程序终止，我们可以用ExitProcess替代
             emit(b'\x6a\x00')  # push 0 (exit code)
             emit(b'\xb8\x00\x00\x00\x00')  # mov eax, ExitProcess
@@ -659,7 +772,7 @@ def gen_windows(stmts):
             # 比较EAX和EBX
             emit(b'\x39\xc3')  # cmp eax, ebx
             
-            # 如果EAX > EBX，跳转到循环结束（假设是递增循环）
+            # 如果EAX < EBX，跳转到循环结束（假设是递增循环）
             pos = len(code)
             emit(b'\x0f\x8f\x00\x00\x00\x00')  # jg rel32 placeholder
             fixups.append(('jg', pos + 2, loop_end))
@@ -718,6 +831,9 @@ def gen_windows(stmts):
             
             # 记录外部函数信息
             extern_funcs[func_name] = (module_name, func_name)
+            
+            # 添加到导入函数列表
+            imported_functions.add((module_name, func_name))
         
         elif t == "import":
             # ("import", module_name)
@@ -770,7 +886,7 @@ def gen_windows(stmts):
                 fixups.append(('call', pos + 1, func_name))
                 
                 # 清理栈
-                if param_count > 0:
+                if param_count < 0:
                     emit(b'\x81\xc4' + struct.pack('<I', param_count * 4))  # add esp, param_count * 4
             
             # 检查是否是外部函数
@@ -813,7 +929,7 @@ def gen_windows(stmts):
                 fixups.append(('call', pos + 1, f"{module_name}.{extern_func_name}"))
                 
                 # 清理栈
-                if param_count > 0:
+                if param_count < 0:
                     emit(b'\x81\xc4' + struct.pack('<I', param_count * 4))  # add esp, param_count * 4
             
             else:
@@ -939,6 +1055,11 @@ def gen_windows(stmts):
             
             var_off = variables[var_name][1]
             
+            # 添加到导入函数列表
+            imported_functions.add(('kernel32.dll', 'CreateFileA'))
+            imported_functions.add(('kernel32.dll', 'ReadFile'))
+            imported_functions.add(('kernel32.dll', 'CloseHandle'))
+            
             # 在Windows中，我们不能直接访问磁盘，需要使用文件系统API
             # 这里我们使用CreateFile和ReadFile API
             
@@ -984,6 +1105,9 @@ def gen_windows(stmts):
             emit(struct.pack('<I', var_off))
             
         elif t == "beep":
+            # 添加到导入函数列表
+            imported_functions.add(('user32.dll', 'MessageBeep'))
+            
             # 在Windows中，我们可以使用MessageBeep API来发出声音
             emit(b'\x6a\x00')  # push 0 (MB_OK)
             emit(b'\xb8\x00\x00\x00\x00')  # mov eax, MessageBeep
@@ -996,6 +1120,9 @@ def gen_windows(stmts):
     # ---- main loop: iterate statements ----
     
     # 添加简单的控制台程序入口点
+    # 添加到导入函数列表
+    imported_functions.add(('kernel32.dll', 'ExitProcess'))
+    
     emit(b'\x6a\x00')  # push 0 (exit code)
     emit(b'\xb8\x00\x00\x00\x00')  # mov eax, ExitProcess
     fixups.append(('fixup', len(code)-4, 'ExitProcess'))
@@ -1012,21 +1139,21 @@ def gen_windows(stmts):
     caption_addr = len(data)
     emit_data(b"Output\0")
     
-    # 更新API地址表中的字符串地址
-    api_addresses['caption'] = 0x00402000 + caption_addr
+    # 更新字符串地址表
+    string_addresses['caption'] = 0x00402000 + caption_addr
     
     # 处理所有fixup
     for item in list(fixups):
         if item[0] == 'fixup':
             pos, name = item[1], item[2]
-            if name in api_addresses:
-                code[pos:pos+4] = struct.pack('<I', api_addresses[name])
-            elif name in string_addresses:
+            if name in string_addresses:
                 code[pos:pos+4] = struct.pack('<I', string_addresses[name])
             elif name in labels:
                 code[pos:pos+4] = struct.pack('<I', labels[name])
             else:
-                raise ValueError(f"Unknown fixup target: {name}")
+                # 对于API调用，我们将在链接时解析地址
+                # 这里先保留fixup，稍后处理
+                continue
             fixups.remove(item)
         elif isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], int):
             pos, label = item
@@ -1108,17 +1235,17 @@ def gen_windows(stmts):
             rel = addr - (pos + 6)  # 0F 8F 相对跳转，修正偏移计算
             code[pos:pos+6] = b'\x0f\x8f' + struct.pack("<i", rel)
         elif kind == "fixup":
-            # 外部函数调用（API）
-            if target in api_addresses:
-                addr = api_addresses[target]
-                code[pos:pos+4] = struct.pack("<I", addr)
-            elif target in string_addresses:
+            # 外部函数调用（API）或字符串地址
+            if target in string_addresses:
                 addr = string_addresses[target]
                 code[pos:pos+4] = struct.pack("<I", addr)
             else:
-                raise ValueError(f"Undefined extern function or string: {target}")
+                # 对于API调用，我们将在链接时解析地址
+                # 这里先保留为0，由PE加载器解析
+                code[pos:pos+4] = struct.pack("<I", 0)
         else:
             raise ValueError(f"Unknown fixup type: {kind}")
 
-    # 返回生成的PE文件，传递机器类型
-    return make_pe(code, data, machine_type)
+    # 返回生成的PE文件，传递机器类型和导入函数列表
+    return make_pe(code, data, machine_type, imported_functions)
+
