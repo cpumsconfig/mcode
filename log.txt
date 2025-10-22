@@ -1,0 +1,104 @@
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+return 0;
+}[2025-10-22 20:58:59,147] INFO: 编译成功，生成PE文件大小: 46663字节
+[2025-10-22 20:59:44,096] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+return 0;
+}
+[2025-10-22 20:59:45,081] INFO: 编译成功，生成PE文件大小: 46663字节
+[2025-10-22 21:00:14,675] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+return 0;
+}
+[2025-10-22 21:00:15,771] INFO: 编译成功，生成PE文件大小: 46663字节
+[2025-10-22 21:01:44,858] INFO: 开始生成Windows PE文件
+[2025-10-22 21:01:44,858] DEBUG: 输入语句数量: 2
+[2025-10-22 21:01:44,858] INFO: 子系统类型: -mconsole
+[2025-10-22 21:01:44,859] INFO: 开始生成C源码
+[2025-10-22 21:01:44,859] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:01:44,859] DEBUG: 已添加头文件和定义
+[2025-10-22 21:01:44,859] DEBUG: 开始处理语句列表
+[2025-10-22 21:01:44,859] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:01:44,859] DEBUG: 处理语句 2: exit
+[2025-10-22 21:01:44,860] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+return 0;
+}
+[2025-10-22 21:01:44,860] DEBUG: C源码生成完成
+[2025-10-22 21:01:45,823] INFO: 编译成功，生成PE文件大小: 46663字节
+[2025-10-22 21:04:24,773] INFO: 开始生成Windows PE文件
+[2025-10-22 21:04:24,774] DEBUG: 输入语句数量: 2
+[2025-10-22 21:04:24,774] INFO: 子系统类型: -mconsole
+[2025-10-22 21:04:24,774] INFO: 开始生成C源码
+[2025-10-22 21:04:24,774] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:04:24,774] DEBUG: 已添加头文件和定义
+[2025-10-22 21:04:24,775] DEBUG: 开始处理语句列表
+[2025-10-22 21:04:24,775] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:04:24,775] DEBUG: 处理语句 2: exit
+[2025-10-22 21:04:24,775] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+printf("Hello from 64-bit Windows!\n");
+return 0;
+}
+[2025-10-22 21:04:24,775] DEBUG: C源码生成完成
+[2025-10-22 21:04:25,737] INFO: 编译成功，生成PE文件大小: 46872字节
+[2025-10-22 21:05:46,344] INFO: 开始生成Windows PE文件
+[2025-10-22 21:05:46,344] DEBUG: 输入语句数量: 2
+[2025-10-22 21:05:46,345] INFO: 子系统类型: -mconsole
+[2025-10-22 21:05:46,345] INFO: 开始生成C源码
+[2025-10-22 21:05:46,345] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:05:46,345] DEBUG: 已添加头文件和定义
+[2025-10-22 21:05:46,345] DEBUG: 开始处理语句列表
+[2025-10-22 21:05:46,345] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:05:46,345] DEBUG: 处理语句 2: exit
+[2025-10-22 21:05:46,345] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+printf("Hello from 64-bit Windows!\n");
+return 0;
+}
+[2025-10-22 21:05:46,346] DEBUG: C源码生成完成
+[2025-10-22 21:05:47,288] INFO: 编译成功，生成PE文件大小: 46872字节
+[2025-10-22 21:07:38,843] INFO: 开始生成Windows PE文件
+[2025-10-22 21:07:38,843] DEBUG: 输入语句数量: 2
+[2025-10-22 21:07:38,844] INFO: 子系统类型: -mconsole
+[2025-10-22 21:07:38,844] INFO: 开始生成C源码
+[2025-10-22 21:07:38,844] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:07:38,844] DEBUG: 已添加头文件和定义
+[2025-10-22 21:07:38,844] DEBUG: 开始处理语句列表
+[2025-10-22 21:07:38,844] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:07:38,844] DEBUG: 处理语句 2: exit
+[2025-10-22 21:07:38,845] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+printf("Hello from 64-bit Windows!\n");
+return 0;
+}
+[2025-10-22 21:07:38,845] DEBUG: C源码生成完成
+[2025-10-22 21:07:39,813] INFO: 编译成功，生成PE文件大小: 46872字节

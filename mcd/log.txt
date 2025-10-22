@@ -1,0 +1,775 @@
+[2025-10-22 21:19:20,811] INFO: 开始生成Windows PE文件
+[2025-10-22 21:19:20,811] DEBUG: 输入语句数量: 3
+[2025-10-22 21:19:20,811] INFO: 子系统类型: -mwindows
+[2025-10-22 21:19:20,811] INFO: 开始生成C源码
+[2025-10-22 21:19:20,811] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:19:20,811] DEBUG: 已添加头文件和定义
+[2025-10-22 21:19:20,812] DEBUG: 开始处理语句列表
+[2025-10-22 21:19:20,812] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:19:20,812] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:19:20,812] DEBUG: 处理语句 3: exit
+[2025-10-22 21:19:20,812] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+MessageBoxA(NULL, "Hello GUI!", "Test", MB_OK);
+Sleep(2000);
+return 0;
+}
+[2025-10-22 21:19:20,812] DEBUG: C源码生成完成
+[2025-10-22 21:19:21,915] INFO: 编译成功，生成PE文件大小: 47481字节
+[2025-10-22 21:19:21,932] INFO: 开始生成Windows PE文件
+[2025-10-22 21:19:21,932] DEBUG: 输入语句数量: 4
+[2025-10-22 21:19:21,932] INFO: 子系统类型: -mconsole
+[2025-10-22 21:19:21,932] INFO: 开始生成C源码
+[2025-10-22 21:19:21,932] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:19:21,932] DEBUG: 已添加头文件和定义
+[2025-10-22 21:19:21,933] DEBUG: 开始处理语句列表
+[2025-10-22 21:19:21,933] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:19:21,933] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:19:21,933] DEBUG: 处理语句 3: print_str
+[2025-10-22 21:19:21,933] DEBUG: 处理语句 4: exit
+[2025-10-22 21:19:21,933] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+printf("Hello Console!\n");
+Sleep(1000);
+printf("This is a test program.\n");
+return 0;
+}
+[2025-10-22 21:19:21,933] DEBUG: C源码生成完成
+[2025-10-22 21:19:22,952] INFO: 编译成功，生成PE文件大小: 46872字节
+[2025-10-22 21:19:22,954] INFO: 开始生成Windows PE文件
+[2025-10-22 21:19:22,954] DEBUG: 输入语句数量: 3
+[2025-10-22 21:19:22,954] INFO: 子系统类型: -mwindows
+[2025-10-22 21:19:22,954] INFO: 开始生成C源码
+[2025-10-22 21:19:22,954] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:19:22,954] DEBUG: 已添加头文件和定义
+[2025-10-22 21:19:22,954] DEBUG: 开始处理语句列表
+[2025-10-22 21:19:22,954] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:19:22,955] DEBUG: 处理语句 2: openurl
+[2025-10-22 21:19:22,955] DEBUG: 处理语句 3: exit
+[2025-10-22 21:19:22,955] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+MessageBoxA(NULL, "即将打开浏览器", "提示", MB_OK);
+ShellExecuteA(NULL, "open", "https://www.example.com", NULL, NULL, SW_SHOW);
+return 0;
+}
+[2025-10-22 21:19:22,955] DEBUG: C源码生成完成
+[2025-10-22 21:19:23,974] INFO: 编译成功，生成PE文件大小: 48269字节
+[2025-10-22 21:21:23,998] INFO: 开始生成Windows PE文件
+[2025-10-22 21:21:23,999] DEBUG: 输入语句数量: 3
+[2025-10-22 21:21:23,999] INFO: 子系统类型: -mwindows
+[2025-10-22 21:21:23,999] INFO: 开始生成C源码
+[2025-10-22 21:21:23,999] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:21:23,999] DEBUG: 已添加头文件和定义
+[2025-10-22 21:21:23,999] DEBUG: 开始处理语句列表
+[2025-10-22 21:21:23,999] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:21:23,999] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:21:24,000] DEBUG: 处理语句 3: exit
+[2025-10-22 21:21:24,000] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+MessageBoxA(NULL, "Hello GUI!", "Test", MB_OK);
+Sleep(2000);
+return 0;
+}
+[2025-10-22 21:21:24,000] DEBUG: C源码生成完成
+[2025-10-22 21:21:24,974] INFO: 编译成功，生成PE文件大小: 47687字节
+[2025-10-22 21:21:24,977] INFO: 开始生成Windows PE文件
+[2025-10-22 21:21:24,977] DEBUG: 输入语句数量: 4
+[2025-10-22 21:21:24,977] INFO: 子系统类型: -mconsole
+[2025-10-22 21:21:24,977] INFO: 开始生成C源码
+[2025-10-22 21:21:24,977] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:21:24,977] DEBUG: 已添加头文件和定义
+[2025-10-22 21:21:24,977] DEBUG: 开始处理语句列表
+[2025-10-22 21:21:24,978] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:21:24,978] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:21:24,978] DEBUG: 处理语句 3: print_str
+[2025-10-22 21:21:24,978] DEBUG: 处理语句 4: exit
+[2025-10-22 21:21:24,978] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+printf("Hello Console!\n");
+Sleep(1000);
+printf("This is a test program.\n");
+return 0;
+}
+[2025-10-22 21:21:24,978] DEBUG: C源码生成完成
+[2025-10-22 21:21:25,941] INFO: 编译成功，生成PE文件大小: 47078字节
+[2025-10-22 21:21:25,943] INFO: 开始生成Windows PE文件
+[2025-10-22 21:21:25,943] DEBUG: 输入语句数量: 3
+[2025-10-22 21:21:25,943] INFO: 子系统类型: -mwindows
+[2025-10-22 21:21:25,943] INFO: 开始生成C源码
+[2025-10-22 21:21:25,943] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:21:25,943] DEBUG: 已添加头文件和定义
+[2025-10-22 21:21:25,943] DEBUG: 开始处理语句列表
+[2025-10-22 21:21:25,944] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:21:25,944] DEBUG: 处理语句 2: openurl
+[2025-10-22 21:21:25,944] DEBUG: 处理语句 3: exit
+[2025-10-22 21:21:25,944] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+MessageBoxA(NULL, "即将打开浏览器", "提示", MB_OK);
+ShellExecuteA(NULL, "open", "https://www.example.com", NULL, NULL, SW_SHOW);
+return 0;
+}
+[2025-10-22 21:21:25,944] DEBUG: C源码生成完成
+[2025-10-22 21:21:26,889] INFO: 编译成功，生成PE文件大小: 48475字节
+[2025-10-22 21:23:06,738] INFO: 开始生成Windows PE文件
+[2025-10-22 21:23:06,739] DEBUG: 输入语句数量: 3
+[2025-10-22 21:23:06,739] INFO: 子系统类型: -mwindows
+[2025-10-22 21:23:06,739] INFO: 开始生成C源码
+[2025-10-22 21:23:06,739] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:23:06,739] DEBUG: 已添加头文件和定义
+[2025-10-22 21:23:06,739] DEBUG: 开始处理语句列表
+[2025-10-22 21:23:06,740] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:23:06,740] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:23:06,740] DEBUG: 处理语句 3: exit
+[2025-10-22 21:23:06,740] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+SetConsoleCP(65001);
+MessageBoxW(NULL, "Hello GUI!", "Test", MB_OK);
+Sleep(2000);
+return 0;
+}
+[2025-10-22 21:23:06,740] DEBUG: C源码生成完成
+[2025-10-22 21:23:07,581] ERROR: GCC编译失败: C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c: In function 'main':
+C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c:8:19: error: passing argument 2 of 'MessageBoxW' from incompatible pointer type [-Wincompatible-pointer-types]
+    8 | MessageBoxW(NULL, "Hello GUI!", "Test", MB_OK);
+      |                   ^~~~~~~~~~~~
+      |                   |
+      |                   char *
+In file included from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/windows.h:72,
+                 from C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c:1:
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winuser.h:3716:55: note: expected 'LPCWSTR' {aka 'const short unsigned int *'} but argument is of type 'char *'
+ 3716 |   WINUSERAPI int WINAPI MessageBoxW(HWND hWnd,LPCWSTR lpText,LPCWSTR lpCaption,UINT uType);
+      |                                               ~~~~~~~~^~~~~~
+In file included from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/minwindef.h:163,
+                 from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/windef.h:9,
+                 from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/windows.h:69:
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winnt.h:320:24: note: 'LPCWSTR' declared here
+  320 |   typedef CONST WCHAR *LPCWSTR,*PCWSTR;
+      |                        ^~~~~~~
+C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c:8:33: error: passing argument 3 of 'MessageBoxW' from incompatible pointer type [-Wincompatible-pointer-types]
+    8 | MessageBoxW(NULL, "Hello GUI!", "Test", MB_OK);
+      |                                 ^~~~~~
+      |                                 |
+      |                                 char *
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winuser.h:3716:70: note: expected 'LPCWSTR' {aka 'const short unsigned int *'} but argument is of type 'char *'
+ 3716 |   WINUSERAPI int WINAPI MessageBoxW(HWND hWnd,LPCWSTR lpText,LPCWSTR lpCaption,UINT uType);
+      |                                                              ~~~~~~~~^~~~~~~~~
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winnt.h:320:24: note: 'LPCWSTR' declared here
+  320 |   typedef CONST WCHAR *LPCWSTR,*PCWSTR;
+      |                        ^~~~~~~
+
+[2025-10-22 21:23:07,582] ERROR: [PE Builder Error] GCC编译失败: C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c: In function 'main':
+C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c:8:19: error: passing argument 2 of 'MessageBoxW' from incompatible pointer type [-Wincompatible-pointer-types]
+    8 | MessageBoxW(NULL, "Hello GUI!", "Test", MB_OK);
+      |                   ^~~~~~~~~~~~
+      |                   |
+      |                   char *
+In file included from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/windows.h:72,
+                 from C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c:1:
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winuser.h:3716:55: note: expected 'LPCWSTR' {aka 'const short unsigned int *'} but argument is of type 'char *'
+ 3716 |   WINUSERAPI int WINAPI MessageBoxW(HWND hWnd,LPCWSTR lpText,LPCWSTR lpCaption,UINT uType);
+      |                                               ~~~~~~~~^~~~~~
+In file included from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/minwindef.h:163,
+                 from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/windef.h:9,
+                 from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/windows.h:69:
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winnt.h:320:24: note: 'LPCWSTR' declared here
+  320 |   typedef CONST WCHAR *LPCWSTR,*PCWSTR;
+      |                        ^~~~~~~
+C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c:8:33: error: passing argument 3 of 'MessageBoxW' from incompatible pointer type [-Wincompatible-pointer-types]
+    8 | MessageBoxW(NULL, "Hello GUI!", "Test", MB_OK);
+      |                                 ^~~~~~
+      |                                 |
+      |                                 char *
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winuser.h:3716:70: note: expected 'LPCWSTR' {aka 'const short unsigned int *'} but argument is of type 'char *'
+ 3716 |   WINUSERAPI int WINAPI MessageBoxW(HWND hWnd,LPCWSTR lpText,LPCWSTR lpCaption,UINT uType);
+      |                                                              ~~~~~~~~^~~~~~~~~
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winnt.h:320:24: note: 'LPCWSTR' declared here
+  320 |   typedef CONST WCHAR *LPCWSTR,*PCWSTR;
+      |                        ^~~~~~~
+
+[2025-10-22 21:23:07,582] ERROR: [Compilation Error] GCC编译失败: C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c: In function 'main':
+C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c:8:19: error: passing argument 2 of 'MessageBoxW' from incompatible pointer type [-Wincompatible-pointer-types]
+    8 | MessageBoxW(NULL, "Hello GUI!", "Test", MB_OK);
+      |                   ^~~~~~~~~~~~
+      |                   |
+      |                   char *
+In file included from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/windows.h:72,
+                 from C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c:1:
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winuser.h:3716:55: note: expected 'LPCWSTR' {aka 'const short unsigned int *'} but argument is of type 'char *'
+ 3716 |   WINUSERAPI int WINAPI MessageBoxW(HWND hWnd,LPCWSTR lpText,LPCWSTR lpCaption,UINT uType);
+      |                                               ~~~~~~~~^~~~~~
+In file included from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/minwindef.h:163,
+                 from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/windef.h:9,
+                 from C:/Program Files (x86)/Dev-Cpp/MinGW32/include/windows.h:69:
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winnt.h:320:24: note: 'LPCWSTR' declared here
+  320 |   typedef CONST WCHAR *LPCWSTR,*PCWSTR;
+      |                        ^~~~~~~
+C:\Users\admin\AppData\Local\Temp\tmp6_qjpt05\temp_program.c:8:33: error: passing argument 3 of 'MessageBoxW' from incompatible pointer type [-Wincompatible-pointer-types]
+    8 | MessageBoxW(NULL, "Hello GUI!", "Test", MB_OK);
+      |                                 ^~~~~~
+      |                                 |
+      |                                 char *
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winuser.h:3716:70: note: expected 'LPCWSTR' {aka 'const short unsigned int *'} but argument is of type 'char *'
+ 3716 |   WINUSERAPI int WINAPI MessageBoxW(HWND hWnd,LPCWSTR lpText,LPCWSTR lpCaption,UINT uType);
+      |                                                              ~~~~~~~~^~~~~~~~~
+C:/Program Files (x86)/Dev-Cpp/MinGW32/include/winnt.h:320:24: note: 'LPCWSTR' declared here
+  320 |   typedef CONST WCHAR *LPCWSTR,*PCWSTR;
+      |                        ^~~~~~~
+
+[2025-10-22 21:23:07,584] INFO: 开始生成Windows PE文件
+[2025-10-22 21:23:07,585] DEBUG: 输入语句数量: 4
+[2025-10-22 21:23:07,585] INFO: 子系统类型: -mconsole
+[2025-10-22 21:23:07,585] INFO: 开始生成C源码
+[2025-10-22 21:23:07,585] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:23:07,585] DEBUG: 已添加头文件和定义
+[2025-10-22 21:23:07,585] DEBUG: 开始处理语句列表
+[2025-10-22 21:23:07,585] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:23:07,585] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:23:07,586] DEBUG: 处理语句 3: print_str
+[2025-10-22 21:23:07,586] DEBUG: 处理语句 4: exit
+[2025-10-22 21:23:07,586] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+SetConsoleCP(65001);
+printf("Hello Console!\n");
+Sleep(1000);
+printf("This is a test program.\n");
+return 0;
+}
+[2025-10-22 21:23:07,586] DEBUG: C源码生成完成
+[2025-10-22 21:23:08,660] INFO: 编译成功，生成PE文件大小: 47272字节
+[2025-10-22 21:23:08,662] INFO: 开始生成Windows PE文件
+[2025-10-22 21:23:08,662] DEBUG: 输入语句数量: 3
+[2025-10-22 21:23:08,662] INFO: 子系统类型: -mwindows
+[2025-10-22 21:23:08,662] INFO: 开始生成C源码
+[2025-10-22 21:23:08,662] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:23:08,662] DEBUG: 已添加头文件和定义
+[2025-10-22 21:23:08,662] DEBUG: 开始处理语句列表
+[2025-10-22 21:23:08,663] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:23:08,663] DEBUG: 处理语句 2: openurl
+[2025-10-22 21:23:08,663] DEBUG: 处理语句 3: exit
+[2025-10-22 21:23:08,663] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+SetConsoleCP(65001);
+MessageBoxW(NULL, "即将打开浏览器", "提示", MB_OK);
+ShellExecuteA(NULL, "open", "https://www.example.com", NULL, NULL, SW_SHOW);
+return 0;
+}
+[2025-10-22 21:23:08,663] DEBUG: C源码生成完成
+[2025-10-22 21:23:09,502] ERROR: GCC编译失败: Command '['gcc', '-O2', '-Wall', '-Wno-unused-parameter', '-static', '-static-libgcc', '-static-libstdc++', '-Wl,--subsystem,console', 'C:\\Users\\admin\\AppData\\Local\\Temp\\tmpkc15_oly\\temp_program.c', '-luser32', '-lkernel32', '-lshell32', '-o', 'C:\\Users\\admin\\AppData\\Local\\Temp\\tmpkc15_oly\\program.exe']' returned non-zero exit status 1.
+[2025-10-22 21:23:09,502] ERROR: [PE Builder Error] GCC编译失败: Command '['gcc', '-O2', '-Wall', '-Wno-unused-parameter', '-static', '-static-libgcc', '-static-libstdc++', '-Wl,--subsystem,console', 'C:\\Users\\admin\\AppData\\Local\\Temp\\tmpkc15_oly\\temp_program.c', '-luser32', '-lkernel32', '-lshell32', '-o', 'C:\\Users\\admin\\AppData\\Local\\Temp\\tmpkc15_oly\\program.exe']' returned non-zero exit status 1.
+[2025-10-22 21:23:09,503] ERROR: [Compilation Error] GCC编译失败: Command '['gcc', '-O2', '-Wall', '-Wno-unused-parameter', '-static', '-static-libgcc', '-static-libstdc++', '-Wl,--subsystem,console', 'C:\\Users\\admin\\AppData\\Local\\Temp\\tmpkc15_oly\\temp_program.c', '-luser32', '-lkernel32', '-lshell32', '-o', 'C:\\Users\\admin\\AppData\\Local\\Temp\\tmpkc15_oly\\program.exe']' returned non-zero exit status 1.
+[2025-10-22 21:24:22,442] INFO: 开始生成Windows PE文件
+[2025-10-22 21:24:22,442] DEBUG: 输入语句数量: 3
+[2025-10-22 21:24:22,442] INFO: 子系统类型: -mwindows
+[2025-10-22 21:24:22,442] INFO: 开始生成C源码
+[2025-10-22 21:24:22,442] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:24:22,443] DEBUG: 已添加头文件和定义
+[2025-10-22 21:24:22,443] DEBUG: 开始处理语句列表
+[2025-10-22 21:24:22,443] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:24:22,443] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:24:22,443] DEBUG: 处理语句 3: exit
+[2025-10-22 21:24:22,444] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+SetConsoleCP(65001);
+MessageBoxA(NULL, "Hello GUI!", "Test", MB_OK);
+Sleep(2000);
+return 0;
+}
+[2025-10-22 21:24:22,444] DEBUG: C源码生成完成
+[2025-10-22 21:24:23,411] INFO: 编译成功，生成PE文件大小: 47881字节
+[2025-10-22 21:24:23,413] INFO: 开始生成Windows PE文件
+[2025-10-22 21:24:23,413] DEBUG: 输入语句数量: 4
+[2025-10-22 21:24:23,413] INFO: 子系统类型: -mconsole
+[2025-10-22 21:24:23,413] INFO: 开始生成C源码
+[2025-10-22 21:24:23,413] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:24:23,413] DEBUG: 已添加头文件和定义
+[2025-10-22 21:24:23,414] DEBUG: 开始处理语句列表
+[2025-10-22 21:24:23,414] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:24:23,414] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:24:23,414] DEBUG: 处理语句 3: print_str
+[2025-10-22 21:24:23,414] DEBUG: 处理语句 4: exit
+[2025-10-22 21:24:23,414] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+SetConsoleCP(65001);
+printf("Hello Console!\n");
+Sleep(1000);
+printf("This is a test program.\n");
+return 0;
+}
+[2025-10-22 21:24:23,414] DEBUG: C源码生成完成
+[2025-10-22 21:24:24,355] INFO: 编译成功，生成PE文件大小: 47272字节
+[2025-10-22 21:24:24,358] INFO: 开始生成Windows PE文件
+[2025-10-22 21:24:24,358] DEBUG: 输入语句数量: 3
+[2025-10-22 21:24:24,358] INFO: 子系统类型: -mwindows
+[2025-10-22 21:24:24,358] INFO: 开始生成C源码
+[2025-10-22 21:24:24,358] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:24:24,358] DEBUG: 已添加头文件和定义
+[2025-10-22 21:24:24,358] DEBUG: 开始处理语句列表
+[2025-10-22 21:24:24,358] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:24:24,358] DEBUG: 处理语句 2: openurl
+[2025-10-22 21:24:24,359] DEBUG: 处理语句 3: exit
+[2025-10-22 21:24:24,359] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+SetConsoleCP(65001);
+MessageBoxA(NULL, "即将打开浏览器", "提示", MB_OK);
+ShellExecuteA(NULL, "open", "https://www.example.com", NULL, NULL, SW_SHOW);
+return 0;
+}
+[2025-10-22 21:24:24,359] DEBUG: C源码生成完成
+[2025-10-22 21:24:25,336] INFO: 编译成功，生成PE文件大小: 48669字节
+[2025-10-22 21:26:37,053] INFO: 开始生成Windows PE文件
+[2025-10-22 21:26:37,053] DEBUG: 输入语句数量: 3
+[2025-10-22 21:26:37,054] INFO: 子系统类型: -mwindows
+[2025-10-22 21:26:37,054] INFO: 开始生成C源码
+[2025-10-22 21:26:37,054] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:26:37,054] DEBUG: 已添加头文件和定义
+[2025-10-22 21:26:37,054] DEBUG: 开始处理语句列表
+[2025-10-22 21:26:37,054] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:26:37,054] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:26:37,055] DEBUG: 处理语句 3: exit
+[2025-10-22 21:26:37,055] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+SetConsoleCP(65001);
+setlocale(LC_ALL, "");
+MessageBoxW(NULL, L"你好，GUI！", L"测试", MB_OK);
+Sleep(2000);
+return 0;
+}
+[2025-10-22 21:26:37,055] DEBUG: C源码生成完成
+[2025-10-22 21:26:38,263] INFO: 编译成功，生成PE文件大小: 48069字节
+[2025-10-22 21:26:38,265] INFO: 开始生成Windows PE文件
+[2025-10-22 21:26:38,265] DEBUG: 输入语句数量: 4
+[2025-10-22 21:26:38,265] INFO: 子系统类型: -mconsole
+[2025-10-22 21:26:38,266] INFO: 开始生成C源码
+[2025-10-22 21:26:38,266] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:26:38,266] DEBUG: 已添加头文件和定义
+[2025-10-22 21:26:38,266] DEBUG: 开始处理语句列表
+[2025-10-22 21:26:38,266] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:26:38,266] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:26:38,266] DEBUG: 处理语句 3: print_str
+[2025-10-22 21:26:38,266] DEBUG: 处理语句 4: exit
+[2025-10-22 21:26:38,267] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+SetConsoleCP(65001);
+setlocale(LC_ALL, "");
+printf("你好，控制台！\n");
+Sleep(1000);
+printf("这是一个测试程序。\n");
+return 0;
+}
+[2025-10-22 21:26:38,267] DEBUG: C源码生成完成
+[2025-10-22 21:26:39,223] INFO: 编译成功，生成PE文件大小: 47460字节
+[2025-10-22 21:26:39,225] INFO: 开始生成Windows PE文件
+[2025-10-22 21:26:39,226] DEBUG: 输入语句数量: 3
+[2025-10-22 21:26:39,226] INFO: 子系统类型: -mwindows
+[2025-10-22 21:26:39,226] INFO: 开始生成C源码
+[2025-10-22 21:26:39,226] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:26:39,226] DEBUG: 已添加头文件和定义
+[2025-10-22 21:26:39,226] DEBUG: 开始处理语句列表
+[2025-10-22 21:26:39,226] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:26:39,226] DEBUG: 处理语句 2: openurl
+[2025-10-22 21:26:39,226] DEBUG: 处理语句 3: exit
+[2025-10-22 21:26:39,226] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+SetConsoleCP(65001);
+setlocale(LC_ALL, "");
+MessageBoxW(NULL, L"即将打开浏览器", L"提示", MB_OK);
+ShellExecuteA(NULL, "open", "https://www.example.com", NULL, NULL, SW_SHOW);
+return 0;
+}
+[2025-10-22 21:26:39,227] DEBUG: C源码生成完成
+[2025-10-22 21:26:40,154] INFO: 编译成功，生成PE文件大小: 49369字节
+[2025-10-22 21:27:33,553] INFO: 开始生成Windows PE文件
+[2025-10-22 21:27:33,554] DEBUG: 输入语句数量: 3
+[2025-10-22 21:27:33,554] INFO: 子系统类型: -mwindows
+[2025-10-22 21:27:33,554] INFO: 开始生成C源码
+[2025-10-22 21:27:33,554] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:27:33,554] DEBUG: 已添加头文件和定义
+[2025-10-22 21:27:33,554] DEBUG: 开始处理语句列表
+[2025-10-22 21:27:33,554] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:27:33,554] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:27:33,555] DEBUG: 处理语句 3: exit
+[2025-10-22 21:27:33,555] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+setlocale(LC_ALL, "");
+MessageBoxW(NULL, L"你好，GUI！", L"测试", MB_OK);
+Sleep(2000);
+return 0;
+}
+[2025-10-22 21:27:33,555] DEBUG: C源码生成完成
+[2025-10-22 21:27:34,503] INFO: 编译成功，生成PE文件大小: 47875字节
+[2025-10-22 21:27:34,505] INFO: 开始生成Windows PE文件
+[2025-10-22 21:27:34,506] DEBUG: 输入语句数量: 4
+[2025-10-22 21:27:34,506] INFO: 子系统类型: -mconsole
+[2025-10-22 21:27:34,506] INFO: 开始生成C源码
+[2025-10-22 21:27:34,506] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:27:34,506] DEBUG: 已添加头文件和定义
+[2025-10-22 21:27:34,506] DEBUG: 开始处理语句列表
+[2025-10-22 21:27:34,506] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:27:34,506] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:27:34,506] DEBUG: 处理语句 3: print_str
+[2025-10-22 21:27:34,506] DEBUG: 处理语句 4: exit
+[2025-10-22 21:27:34,506] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+setlocale(LC_ALL, "");
+printf("你好，控制台！\n");
+Sleep(1000);
+printf("这是一个测试程序。\n");
+return 0;
+}
+[2025-10-22 21:27:34,507] DEBUG: C源码生成完成
+[2025-10-22 21:27:35,480] INFO: 编译成功，生成PE文件大小: 47266字节
+[2025-10-22 21:27:35,482] INFO: 开始生成Windows PE文件
+[2025-10-22 21:27:35,483] DEBUG: 输入语句数量: 3
+[2025-10-22 21:27:35,483] INFO: 子系统类型: -mwindows
+[2025-10-22 21:27:35,483] INFO: 开始生成C源码
+[2025-10-22 21:27:35,483] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:27:35,483] DEBUG: 已添加头文件和定义
+[2025-10-22 21:27:35,483] DEBUG: 开始处理语句列表
+[2025-10-22 21:27:35,483] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:27:35,483] DEBUG: 处理语句 2: openurl
+[2025-10-22 21:27:35,483] DEBUG: 处理语句 3: exit
+[2025-10-22 21:27:35,483] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(65001);
+setlocale(LC_ALL, "");
+MessageBoxW(NULL, L"即将打开浏览器", L"提示", MB_OK);
+ShellExecuteA(NULL, "open", "https://www.example.com", NULL, NULL, SW_SHOW);
+return 0;
+}
+[2025-10-22 21:27:35,483] DEBUG: C源码生成完成
+[2025-10-22 21:27:36,398] INFO: 编译成功，生成PE文件大小: 48663字节
+[2025-10-22 21:28:35,113] INFO: 开始生成Windows PE文件
+[2025-10-22 21:28:35,113] DEBUG: 输入语句数量: 3
+[2025-10-22 21:28:35,113] INFO: 子系统类型: -mwindows
+[2025-10-22 21:28:35,114] INFO: 开始生成C源码
+[2025-10-22 21:28:35,114] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:28:35,114] DEBUG: 已添加头文件和定义
+[2025-10-22 21:28:35,114] DEBUG: 开始处理语句列表
+[2025-10-22 21:28:35,114] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:28:35,114] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:28:35,114] DEBUG: 处理语句 3: exit
+[2025-10-22 21:28:35,115] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(CP_UTF8);
+SetConsoleCP(CP_UTF8);
+setlocale(LC_ALL, "chs");
+MessageBoxW(NULL, L"你好，GUI！", L"测试", MB_OK);
+Sleep(2000);
+return 0;
+}
+[2025-10-22 21:28:35,115] DEBUG: C源码生成完成
+[2025-10-22 21:28:36,133] INFO: 编译成功，生成PE文件大小: 48069字节
+[2025-10-22 21:28:36,136] INFO: 开始生成Windows PE文件
+[2025-10-22 21:28:36,137] DEBUG: 输入语句数量: 4
+[2025-10-22 21:28:36,137] INFO: 子系统类型: -mconsole
+[2025-10-22 21:28:36,137] INFO: 开始生成C源码
+[2025-10-22 21:28:36,137] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:28:36,137] DEBUG: 已添加头文件和定义
+[2025-10-22 21:28:36,137] DEBUG: 开始处理语句列表
+[2025-10-22 21:28:36,137] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:28:36,137] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:28:36,137] DEBUG: 处理语句 3: print_str
+[2025-10-22 21:28:36,138] DEBUG: 处理语句 4: exit
+[2025-10-22 21:28:36,138] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(CP_UTF8);
+SetConsoleCP(CP_UTF8);
+setlocale(LC_ALL, "chs");
+printf("你好，控制台！\n");
+Sleep(1000);
+printf("这是一个测试程序。\n");
+return 0;
+}
+[2025-10-22 21:28:36,138] DEBUG: C源码生成完成
+[2025-10-22 21:28:37,128] INFO: 编译成功，生成PE文件大小: 47460字节
+[2025-10-22 21:28:37,130] INFO: 开始生成Windows PE文件
+[2025-10-22 21:28:37,130] DEBUG: 输入语句数量: 3
+[2025-10-22 21:28:37,130] INFO: 子系统类型: -mwindows
+[2025-10-22 21:28:37,130] INFO: 开始生成C源码
+[2025-10-22 21:28:37,131] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:28:37,131] DEBUG: 已添加头文件和定义
+[2025-10-22 21:28:37,131] DEBUG: 开始处理语句列表
+[2025-10-22 21:28:37,131] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:28:37,131] DEBUG: 处理语句 2: openurl
+[2025-10-22 21:28:37,131] DEBUG: 处理语句 3: exit
+[2025-10-22 21:28:37,131] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+SetConsoleOutputCP(CP_UTF8);
+SetConsoleCP(CP_UTF8);
+setlocale(LC_ALL, "chs");
+MessageBoxW(NULL, L"即将打开浏览器", L"提示", MB_OK);
+ShellExecuteA(NULL, "open", "https://www.example.com", NULL, NULL, SW_SHOW);
+return 0;
+}
+[2025-10-22 21:28:37,131] DEBUG: C源码生成完成
+[2025-10-22 21:28:38,063] INFO: 编译成功，生成PE文件大小: 49369字节
+[2025-10-22 21:29:18,592] INFO: 开始生成Windows PE文件
+[2025-10-22 21:29:18,592] DEBUG: 输入语句数量: 3
+[2025-10-22 21:29:18,592] INFO: 子系统类型: -mwindows
+[2025-10-22 21:29:18,592] INFO: 开始生成C源码
+[2025-10-22 21:29:18,592] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:29:18,592] DEBUG: 已添加头文件和定义
+[2025-10-22 21:29:18,592] DEBUG: 开始处理语句列表
+[2025-10-22 21:29:18,593] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:29:18,593] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:29:18,593] DEBUG: 处理语句 3: exit
+[2025-10-22 21:29:18,593] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+system("chcp 65001 >nul");
+SetConsoleOutputCP(CP_UTF8);
+SetConsoleCP(CP_UTF8);
+setlocale(LC_ALL, "chs");
+MessageBoxW(NULL, L"你好，GUI！", L"测试", MB_OK);
+Sleep(2000);
+return 0;
+}
+[2025-10-22 21:29:18,593] DEBUG: C源码生成完成
+[2025-10-22 21:29:19,577] INFO: 编译成功，生成PE文件大小: 48244字节
+[2025-10-22 21:29:19,579] INFO: 开始生成Windows PE文件
+[2025-10-22 21:29:19,580] DEBUG: 输入语句数量: 4
+[2025-10-22 21:29:19,580] INFO: 子系统类型: -mconsole
+[2025-10-22 21:29:19,580] INFO: 开始生成C源码
+[2025-10-22 21:29:19,580] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:29:19,580] DEBUG: 已添加头文件和定义
+[2025-10-22 21:29:19,580] DEBUG: 开始处理语句列表
+[2025-10-22 21:29:19,580] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:29:19,580] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:29:19,580] DEBUG: 处理语句 3: print_str
+[2025-10-22 21:29:19,580] DEBUG: 处理语句 4: exit
+[2025-10-22 21:29:19,580] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+system("chcp 65001 >nul");
+SetConsoleOutputCP(CP_UTF8);
+SetConsoleCP(CP_UTF8);
+setlocale(LC_ALL, "chs");
+printf("你好，控制台！\n");
+Sleep(1000);
+printf("这是一个测试程序。\n");
+return 0;
+}
+[2025-10-22 21:29:19,581] DEBUG: C源码生成完成
+[2025-10-22 21:29:20,507] INFO: 编译成功，生成PE文件大小: 47635字节
+[2025-10-22 21:29:20,509] INFO: 开始生成Windows PE文件
+[2025-10-22 21:29:20,510] DEBUG: 输入语句数量: 3
+[2025-10-22 21:29:20,510] INFO: 子系统类型: -mwindows
+[2025-10-22 21:29:20,510] INFO: 开始生成C源码
+[2025-10-22 21:29:20,510] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:29:20,510] DEBUG: 已添加头文件和定义
+[2025-10-22 21:29:20,510] DEBUG: 开始处理语句列表
+[2025-10-22 21:29:20,510] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:29:20,510] DEBUG: 处理语句 2: openurl
+[2025-10-22 21:29:20,510] DEBUG: 处理语句 3: exit
+[2025-10-22 21:29:20,510] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+system("chcp 65001 >nul");
+SetConsoleOutputCP(CP_UTF8);
+SetConsoleCP(CP_UTF8);
+setlocale(LC_ALL, "chs");
+MessageBoxW(NULL, L"即将打开浏览器", L"提示", MB_OK);
+ShellExecuteA(NULL, "open", "https://www.example.com", NULL, NULL, SW_SHOW);
+return 0;
+}
+[2025-10-22 21:29:20,511] DEBUG: C源码生成完成
+[2025-10-22 21:29:21,440] INFO: 编译成功，生成PE文件大小: 50056字节
+[2025-10-22 21:29:39,863] INFO: 开始生成Windows PE文件
+[2025-10-22 21:29:39,863] DEBUG: 输入语句数量: 3
+[2025-10-22 21:29:39,863] INFO: 子系统类型: -mwindows
+[2025-10-22 21:29:39,863] INFO: 开始生成C源码
+[2025-10-22 21:29:39,863] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:29:39,863] DEBUG: 已添加头文件和定义
+[2025-10-22 21:29:39,863] DEBUG: 开始处理语句列表
+[2025-10-22 21:29:39,864] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:29:39,864] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:29:39,864] DEBUG: 处理语句 3: exit
+[2025-10-22 21:29:39,864] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+system("chcp 65001 >nul");
+SetConsoleOutputCP(CP_UTF8);
+SetConsoleCP(CP_UTF8);
+MessageBoxW(NULL, L"你好，GUI！", L"测试", MB_OK);
+Sleep(2000);
+return 0;
+}
+[2025-10-22 21:29:39,864] DEBUG: C源码生成完成
+[2025-10-22 21:29:40,813] INFO: 编译成功，生成PE文件大小: 48056字节
+[2025-10-22 21:29:40,815] INFO: 开始生成Windows PE文件
+[2025-10-22 21:29:40,815] DEBUG: 输入语句数量: 4
+[2025-10-22 21:29:40,815] INFO: 子系统类型: -mconsole
+[2025-10-22 21:29:40,815] INFO: 开始生成C源码
+[2025-10-22 21:29:40,816] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:29:40,816] DEBUG: 已添加头文件和定义
+[2025-10-22 21:29:40,816] DEBUG: 开始处理语句列表
+[2025-10-22 21:29:40,816] DEBUG: 处理语句 1: print_str
+[2025-10-22 21:29:40,816] DEBUG: 处理语句 2: sleep
+[2025-10-22 21:29:40,816] DEBUG: 处理语句 3: print_str
+[2025-10-22 21:29:40,816] DEBUG: 处理语句 4: exit
+[2025-10-22 21:29:40,816] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+system("chcp 65001 >nul");
+SetConsoleOutputCP(CP_UTF8);
+SetConsoleCP(CP_UTF8);
+printf("你好，控制台！\n");
+Sleep(1000);
+printf("这是一个测试程序。\n");
+return 0;
+}
+[2025-10-22 21:29:40,816] DEBUG: C源码生成完成
+[2025-10-22 21:29:41,764] INFO: 编译成功，生成PE文件大小: 47447字节
+[2025-10-22 21:29:41,767] INFO: 开始生成Windows PE文件
+[2025-10-22 21:29:41,767] DEBUG: 输入语句数量: 3
+[2025-10-22 21:29:41,767] INFO: 子系统类型: -mwindows
+[2025-10-22 21:29:41,768] INFO: 开始生成C源码
+[2025-10-22 21:29:41,768] DEBUG: 开始转换语句为C源码
+[2025-10-22 21:29:41,768] DEBUG: 已添加头文件和定义
+[2025-10-22 21:29:41,768] DEBUG: 开始处理语句列表
+[2025-10-22 21:29:41,768] DEBUG: 处理语句 1: msgbox
+[2025-10-22 21:29:41,768] DEBUG: 处理语句 2: openurl
+[2025-10-22 21:29:41,768] DEBUG: 处理语句 3: exit
+[2025-10-22 21:29:41,768] INFO: 生成的C代码:
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#define _CRT_SECURE_NO_WARNINGS
+int main() {
+system("chcp 65001 >nul");
+SetConsoleOutputCP(CP_UTF8);
+SetConsoleCP(CP_UTF8);
+MessageBoxW(NULL, L"即将打开浏览器", L"提示", MB_OK);
+ShellExecuteA(NULL, "open", "https://www.example.com", NULL, NULL, SW_SHOW);
+return 0;
+}
+[2025-10-22 21:29:41,769] DEBUG: C源码生成完成
+[2025-10-22 21:29:42,701] INFO: 编译成功，生成PE文件大小: 49356字节

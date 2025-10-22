@@ -530,6 +530,36 @@ class BackendHome:
                     'arrays': {},
                     'structs': {}
                 }
+        elif t == "msgbox":
+            # 显示消息框
+            msg = stmt[1] if len(stmt) > 1 else "Hello"
+            caption = stmt[2] if len(stmt) > 2 else "Message"
+            # 处理字符串：修复转义符残留和不对称引号问题
+            # 改动1：先替换所有转义引号\"为正常引号"，消除转义符干扰
+            msg = msg.replace('\\"', '"')
+            caption = caption.replace('\\"', '"')
+            # 改动2：用strip('"')去除首尾所有"（无论是否成对），替代原“首尾都为"才处理”的逻辑
+            if msg.startswith('"') or msg.endswith('"'):
+                msg = msg.strip('"')
+            if caption.startswith('"') or caption.endswith('"'):
+                caption = caption.strip('"')
+            # （可选）改动3：清理首尾意外空白（如输入"  Hello  "）
+            msg = msg.strip()
+            caption = caption.strip()
+
+            try:
+                import ctypes
+                # 显式指定参数类型，确保Unicode兼容（沿用之前修复的逻辑）
+                ctypes.windll.user32.MessageBoxW.argtypes = [
+                    ctypes.c_void_p,
+                    ctypes.c_wchar_p,
+                    ctypes.c_wchar_p,
+                    ctypes.c_uint
+                ]
+                ctypes.windll.user32.MessageBoxW(None, msg, caption, 0)
+            except (ImportError, AttributeError, ctypes.ArgumentError):
+                self.output_buffer.append(f"[{caption}] {msg}\n")
+
 
         elif t == "exit":
             # 退出

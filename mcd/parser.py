@@ -86,8 +86,13 @@ def parse(tokens):
         elif t == "exit":
             if i+1 >= len(tokens):
                 raise SyntaxError(f"第{line_num}行: exit语句缺少参数")
-            stmts.append(("exit", int(tokens[i+1][0],0)))
-            i += 2
+            try:
+                exit_code = int(tokens[i+1][0], 0)
+                stmts.append(("exit", exit_code))
+                i += 2
+            except ValueError:
+                raise SyntaxError(f"第{line_num}行: exit代码必须是数字")
+
 
         elif t in ["ax","bx","cx","dx","al","bl","cl","dl","ah","bh","ch","dh","si","di","sp","bp","es","cs","ss","ds"]:
             if i+2 >= len(tokens):
@@ -727,9 +732,40 @@ def parse(tokens):
             stmts.append(("hlt",))
             i += 1
         elif t == "clear_screen":
-            # clear_screen语句不需要参数
             stmts.append(("clear_screen",))
             i += 1
+
+        elif t == "sleep":
+            if i+1 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: sleep语句缺少时间参数")
+            duration = int(tokens[i+1][0], 0)
+            stmts.append(("sleep", duration))
+            i += 2
+
+        elif t == "openurl":
+            if i+1 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: openurl语句缺少URL参数")
+            url = tokens[i+1][0]
+            stmts.append(("openurl", url))
+            i += 2
+        elif t == "msgbox":
+            if i+1 >= len(tokens):
+                raise SyntaxError(f"第{line_num}行: msgbox语句缺少消息参数")
+            msg = tokens[i+1][0]
+            # 检查下一个token是否与当前msgbox在同一行
+            if i+2 < len(tokens) and tokens[i+2][1] == line_num:
+                # 标题参数在同一行，才视为有效
+                caption = tokens[i+2][0]
+                i += 3
+            else:
+                # 无标题参数，使用默认值
+                caption = "Message"
+                i += 2
+            # 转义引号
+            msg = msg.replace('"', '\\"')
+            caption = caption.replace('"', '\\"')
+            stmts.append(("msgbox", msg, caption))
+
 
         else:
             raise SyntaxError(f"第{line_num}行: 未知语句: {t}")
