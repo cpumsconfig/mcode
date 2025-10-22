@@ -1,1251 +1,291 @@
 # -*- coding: utf-8 -*-
-import struct
+import os
+import subprocess
+import logging
+import tempfile
+import shutil
+from typing import List, Union, Optional
+import datetime
+
+# 配置日志
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    handlers=[
+        logging.FileHandler('log.txt', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # PE文件结构常量
 IMAGE_DOS_SIGNATURE = 0x5A4D      # MZ
 IMAGE_NT_SIGNATURE = 0x00004550  # PE00
+IMAGE_SUBSYSTEM_WINDOWS_CUI = 3
+IMAGE_SUBSYSTEM_WINDOWS_GUI = 2
+IMAGE_FILE_MACHINE_I386 = 0x014C
+IMAGE_FILE_MACHINE_AMD64 = 0x8664
 
-def create_dos_header():
-    """创建DOS头"""
-    dos_header = bytearray()
-    dos_header.extend(struct.pack('<H', 0x5A4D))  # e_magic (MZ)
-    dos_header.extend(struct.pack('<H', 0x0040))  # e_cblp
-    dos_header.extend(struct.pack('<H', 0x0001))  # e_cp
-    dos_header.extend(struct.pack('<H', 0x0000))  # e_crlc
-    dos_header.extend(struct.pack('<H', 0x0040))  # e_cparhdr
-    dos_header.extend(struct.pack('<H', 0x0000))  # e_minalloc
-    dos_header.extend(struct.pack('<H', 0xFFFF))  # e_maxalloc
-    dos_header.extend(struct.pack('<H', 0x0000))  # e_ss
-    dos_header.extend(struct.pack('<H', 0x00B8))  # e_sp
-    dos_header.extend(struct.pack('<H', 0x0000))  # e_csum
-    dos_header.extend(struct.pack('<H', 0x0000))  # e_ip
-    dos_header.extend(struct.pack('<H', 0x0000))  # e_cs
-    dos_header.extend(struct.pack('<H', 0x0040))  # e_lfarlc
-    dos_header.extend(struct.pack('<H', 0x0000))  # e_ovno
-    dos_header.extend(b'\x00' * 8)      # e_res
-    dos_header.extend(struct.pack('<H', 0x0040))  # e_oemid
-    dos_header.extend(struct.pack('<H', 0x0000))  # e_oeminfo
-    dos_header.extend(b'\x00' * 20)     # e_res2
-    dos_header.extend(struct.pack('<I', 0x00000080))  # e_lfanew (PE头偏移)
-    
-    # 确保DOS头的长度是0x80字节
-    if len(dos_header) < 0x80:
-        dos_header.extend(b'\x00' * (0x80 - len(dos_header)))
-    
-    return dos_header
+# 错误码定义
+class PEBuilderError(Exception):
+    """PE构建器基础异常类"""
+    def __init__(self, message):
+        super().__init__(message)
+        logger.error(f"[PE Builder Error] {message}")
 
+class CompilationError(PEBuilderError):
+    """编译错误"""
+    def __init__(self, message):
+        super().__init__(message)
+        logger.error(f"[Compilation Error] {message}")
 
-def create_nt_headers(entry_point, code_size, data_size, machine_type=0x8664, import_table_rva=0, import_table_size=0):
-    """创建NT头"""
-    nt_headers = bytearray()
-    
-    # 签名
-    nt_headers.extend(struct.pack('<I', 0x00004550))  # PE00
-    
-    # 文件头
-    nt_headers.extend(struct.pack('<H', machine_type))  # Machine
-    nt_headers.extend(struct.pack('<H', 3))            # NumberOfSections (改为3个节区)
-    nt_headers.extend(struct.pack('<I', 0))            # TimeDateStamp
-    nt_headers.extend(struct.pack('<I', 0))            # PointerToSymbolTable
-    nt_headers.extend(struct.pack('<I', 0))            # NumberOfSymbols
-    nt_headers.extend(struct.pack('<H', 0xE0))         # SizeOfOptionalHeader
-    nt_headers.extend(struct.pack('<H', 0x0022))       # Characteristics
-    
-    # 可选头 - 根据机器类型设置Magic字段
-    if machine_type == 0x014C:  # IMAGE_FILE_MACHINE_I386 (32位)
-        nt_headers.extend(struct.pack('<H', 0x010B))    # Magic (PE32)
-    else:  # IMAGE_FILE_MACHINE_AMD64 (64位)
-        nt_headers.extend(struct.pack('<H', 0x020B))    # Magic (PE32+)
-    nt_headers.extend(struct.pack('<B', 0x06))      # MajorLinkerVersion
-    nt_headers.extend(struct.pack('<B', 0x00))      # MinorLinkerVersion
-    nt_headers.extend(struct.pack('<I', 0x100))     # SizeOfCode
-    nt_headers.extend(struct.pack('<I', 0x100))     # SizeOfInitializedData
-    nt_headers.extend(struct.pack('<I', 0))         # SizeOfUninitializedData
-    nt_headers.extend(struct.pack('<I', entry_point))  # AddressOfEntryPoint
-    nt_headers.extend(struct.pack('<I', 0x1000))    # BaseOfCode
-    
-    # 根据机器类型设置BaseOfData和ImageBase
-    if machine_type == 0x014C:  # IMAGE_FILE_MACHINE_I386 (32位)
-        nt_headers.extend(struct.pack('<I', 0x2000))    # BaseOfData
-        nt_headers.extend(struct.pack('<I', 0x00400000))  # ImageBase (32位)
-    else:  # IMAGE_FILE_MACHINE_AMD64 (64位)
-        nt_headers.extend(struct.pack('<Q', 0x0000000140000000))  # ImageBase (64位)
-    
-    nt_headers.extend(struct.pack('<I', 0x1000))    # SectionAlignment
-    nt_headers.extend(struct.pack('<I', 0x200))     # FileAlignment
-    nt_headers.extend(struct.pack('<H', 4))          # MajorOperatingSystemVersion
-    nt_headers.extend(struct.pack('<H', 0))          # MinorOperatingSystemVersion
-    nt_headers.extend(struct.pack('<H', 0))          # MajorImageVersion
-    nt_headers.extend(struct.pack('<H', 0))          # MinorImageVersion
-    nt_headers.extend(struct.pack('<H', 4))          # MajorSubsystemVersion
-    nt_headers.extend(struct.pack('<H', 0))          # MinorSubsystemVersion
-    nt_headers.extend(struct.pack('<I', 0))          # Win32VersionValue
-    nt_headers.extend(struct.pack('<I', 0x4000))    # SizeOfImage (增加大小以容纳导入表)
-    nt_headers.extend(struct.pack('<I', 0x200))     # SizeOfHeaders
-    nt_headers.extend(struct.pack('<I', 0))          # CheckSum
-    nt_headers.extend(struct.pack('<H', 2))          # Subsystem (Windows GUI)
-    nt_headers.extend(struct.pack('<H', 0))          # DllCharacteristics
-    
-    # 根据机器类型设置堆栈和堆
-    if machine_type == 0x014C:  # IMAGE_FILE_MACHINE_I386 (32位)
-        nt_headers.extend(struct.pack('<I', 0x00100000))  # SizeOfStackReserve
-        nt_headers.extend(struct.pack('<I', 0x00001000))  # SizeOfStackCommit
-        nt_headers.extend(struct.pack('<I', 0x00100000))  # SizeOfHeapReserve
-        nt_headers.extend(struct.pack('<I', 0x00001000))  # SizeOfHeapCommit
-    else:  # IMAGE_FILE_MACHINE_AMD64 (64位)
-        nt_headers.extend(struct.pack('<Q', 0x00100000))  # SizeOfStackReserve
-        nt_headers.extend(struct.pack('<Q', 0x00001000))  # SizeOfStackCommit
-        nt_headers.extend(struct.pack('<Q', 0x00100000))  # SizeOfHeapReserve
-        nt_headers.extend(struct.pack('<Q', 0x00001000))  # SizeOfHeapCommit
-    
-    nt_headers.extend(struct.pack('<I', 0))          # LoaderFlags
-    nt_headers.extend(struct.pack('<I', 16))         # NumberOfRvaAndSizes
-    
-    # 数据目录
-    nt_headers.extend(struct.pack('<I', 0))        # Export Table RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Export Table Size
-    nt_headers.extend(struct.pack('<I', import_table_rva))  # Import Table RVA
-    nt_headers.extend(struct.pack('<I', import_table_size))  # Import Table Size
-    nt_headers.extend(struct.pack('<I', 0))        # Resource Table RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Resource Table Size
-    nt_headers.extend(struct.pack('<I', 0))        # Exception Table RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Exception Table Size
-    nt_headers.extend(struct.pack('<I', 0))        # Certificate Table RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Certificate Table Size
-    nt_headers.extend(struct.pack('<I', 0))        # Base Relocation Table RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Base Relocation Table Size
-    nt_headers.extend(struct.pack('<I', 0))        # Debug RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Debug Size
-    nt_headers.extend(struct.pack('<I', 0))        # Architecture RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Architecture Size
-    nt_headers.extend(struct.pack('<I', 0))        # Global Ptr RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Global Ptr Size
-    nt_headers.extend(struct.pack('<I', 0))        # TLS Table RVA
-    nt_headers.extend(struct.pack('<I', 0))        # TLS Table Size
-    nt_headers.extend(struct.pack('<I', 0))        # Load Config Table RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Load Config Table Size
-    nt_headers.extend(struct.pack('<I', 0))        # Bound Import RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Bound Import Size
-    nt_headers.extend(struct.pack('<I', import_table_rva + 0x40))  # IAT RVA (跟随导入表)
-    nt_headers.extend(struct.pack('<I', 0))        # IAT Size
-    nt_headers.extend(struct.pack('<I', 0))        # Delay Import Descriptor RVA
-    nt_headers.extend(struct.pack('<I', 0))        # Delay Import Descriptor Size
-    nt_headers.extend(struct.pack('<I', 0))        # COM+ Runtime Header RVA
-    nt_headers.extend(struct.pack('<I', 0))        # COM+ Runtime Header Size
-    nt_headers.extend(struct.pack('<I', 0))        # Reserved
-    nt_headers.extend(struct.pack('<I', 0))        # Reserved
-    
-    return nt_headers
+class InvalidStatementError(PEBuilderError):
+    """无效语句错误"""
+    def __init__(self, message):
+        super().__init__(message)
+        logger.error(f"[Invalid Statement Error] {message}")
 
-
-def create_section_header(name, size, va, characteristics, raw, flags):
-    """创建节区头"""
-    section_header = bytearray()
-    section_header.extend(name.ljust(8, '\x00')[:8].encode('ascii'))  # Name
-    section_header.extend(struct.pack('<I', size))  # VirtualSize
-    section_header.extend(struct.pack('<I', va))  # VirtualAddress
-    section_header.extend(struct.pack('<I', size))  # SizeOfRawData
-    section_header.extend(struct.pack('<I', raw))  # PointerToRawData
-    section_header.extend(struct.pack('<I', 0))  # PointerToRelocations
-    section_header.extend(struct.pack('<I', 0))  # PointerToLinenumbers
-    section_header.extend(struct.pack('<H', 0))  # NumberOfRelocations
-    section_header.extend(struct.pack('<H', 0))  # NumberOfLinenumbers
-    section_header.extend(struct.pack('<I', characteristics))  # Characteristics
-    return section_header
-
-
-def align_up(x, align):
-    return (x + align - 1) & ~(align - 1)
-
-def make_pe(code, data, machine_type=0x8664, imported_functions=None):
-    """创建PE文件"""
-    if imported_functions is None:
-        imported_functions = []
+def gen_windows(stmts: List[List[str]]) -> bytes:
+    """使用GCC编译Windows程序
+    
+    Args:
+        stmts: 语句列表，每个语句是一个字符串列表
         
-    file_align = 0x200
-    section_align = 0x1000
-
-    # 入口点（代码段 RVA）
-    entry_point = 0x1000
-
-    # DOS + NT
-    dos_header = create_dos_header()
-    
-    # 创建导入表
-    import_table = bytearray()
-    import_descriptor_size = 20  # 每个导入描述符的大小
-    
-    # 按DLL分组导入函数
-    dll_groups = {}
-    for dll_name, func_name in imported_functions:
-        if dll_name not in dll_groups:
-            dll_groups[dll_name] = []
-        dll_groups[dll_name].append(func_name)
-    
-    # 为每个DLL创建导入描述符
-    dll_names = bytearray()
-    hint_name_table = bytearray()
-    iat = bytearray()
-    
-    current_rva = 0x2000  # 导入表的起始RVA
-    
-    # 计算各部分的RVA
-    import_table_rva = current_rva
-    dll_names_rva = import_table_rva + len(import_table) + len(dll_groups) * import_descriptor_size
-    hint_name_table_rva = dll_names_rva + len(dll_names)
-    iat_rva = hint_name_table_rva + len(hint_name_table)
-    
-    for dll_name, func_names in dll_groups.items():
-        # DLL名称表
-        dll_name_rva = dll_names_rva + len(dll_names)
-        dll_names.extend(dll_name.encode('ascii') + b'\x00')
+    Returns:
+        bytes: 编译生成的PE文件内容
         
-        # Hint/Name表
-        hint_name_rvas = []
-        for func_name in func_names:
-            hint_name_rva = hint_name_table_rva + len(hint_name_table)
-            hint_name_rvas.append(hint_name_rva)
-            hint_name_table.extend(struct.pack('<H', 0))  # Hint
-            hint_name_table.extend(func_name.encode('ascii') + b'\x00')
-        
-        # IAT
-        for hint_name_rva in hint_name_rvas:
-            iat.extend(struct.pack('<I', hint_name_rva))
-        iat.extend(struct.pack('<I', 0))  # 结束标记
-        
-        # 导入描述符
-        import_table.extend(struct.pack('<I', hint_name_table_rva))  # OriginalFirstThunk (指向Hint/Name表)
-        import_table.extend(struct.pack('<I', 0))  # TimeDateStamp
-        import_table.extend(struct.pack('<I', 0))  # ForwarderChain
-        import_table.extend(struct.pack('<I', dll_name_rva))  # Name
-        import_table.extend(struct.pack('<I', iat_rva))  # FirstThunk (指向IAT)
-        
-        # 更新IAT的RVA
-        iat_rva += len(func_names) * 4 + 4  # 每个函数4字节，加上结束标记
-    
-    # 添加结束标记
-    import_table.extend(b'\x00' * 20)
-    
-    # 计算导入表的总大小
-    import_table_size = len(import_table) + len(dll_names) + len(hint_name_table) + len(iat)
-    
-    # 创建NT头
-    nt_headers = create_nt_headers(entry_point, len(code), len(data), machine_type, 
-                                  import_table_rva, import_table_size)
-
-    # 节表
-    section_table = bytearray()
-
-    # headers 大小（对齐到 FileAlignment）
-    headers_size = align_up(len(dos_header) + len(nt_headers) + 3*40, file_align)
-    
-    # ---- 拼接文件 ----
-    pe_file = bytearray()
-    
-    # 添加DOS头
-    pe_file.extend(dos_header)
-    
-    # 添加NT头（包括PE签名）
-    pe_file.extend(nt_headers)
-    
-    # 添加节表
-    pe_file.extend(section_table)
-    
-    # 填充到headers_size
-    pe_file = pe_file.ljust(headers_size, b'\x00')
-    
-    # 创建.text节区（代码）
-    text_section = bytearray()
-    text_section.extend(code)
-    text_section = text_section.ljust(align_up(len(text_section), file_align), b'\x00')
-    
-    # 创建.data节区（数据）
-    data_section = bytearray()
-    data_section.extend(data)
-    data_section = data_section.ljust(align_up(len(data_section), file_align), b'\x00')
-    
-    # 创建.idata节区（导入表）
-    idata_section = bytearray()
-    
-    # 确保导入表从RVA 0x2000开始
-    idata_section.extend(b'\x00' * (import_table_rva - (headers_size + len(text_section) + len(data_section))))
-    
-    # 添加导入表、DLL名称、Hint/Name表和IAT
-    idata_section.extend(import_table)
-    idata_section.extend(dll_names)
-    idata_section.extend(hint_name_table)
-    idata_section.extend(iat)
-    
-    # 对齐到文件对齐边界
-    idata_section = idata_section.ljust(align_up(len(idata_section), file_align), b'\x00')
-    
-    # 计算节区在文件中的偏移
-    text_raw = headers_size
-    data_raw = text_raw + len(text_section)
-    idata_raw = data_raw + len(data_section)
-    
-    # 添加节表项
-    section_table.extend(create_section_header(".text", len(text_section), 0x1000, 0x60000020, text_raw, 0x00000020))
-    section_table.extend(create_section_header(".data", len(data_section), 0x2000, 0xC0000040, data_raw, 0x00000040))
-    section_table.extend(create_section_header(".idata", len(idata_section), import_table_rva, 0xC0000040, idata_raw, 0x00000080))
-    
-    # 重新构建PE文件，包含节表
-    pe_file = bytearray()
-    pe_file.extend(dos_header)
-    pe_file.extend(nt_headers)
-    pe_file.extend(section_table)
-    pe_file = pe_file.ljust(headers_size, b'\x00')
-    pe_file.extend(text_section)
-    pe_file.extend(data_section)
-    pe_file.extend(idata_section)
-    
-    return pe_file
-
-
-
-def gen_windows(stmts):
+    Raises:
+        InvalidStatementError: 当输入语句无效时
+        CompilationError: 当编译失败时
     """
-    生成Windows PE格式的机器代码
-    支持: let, print_str, print_var, exit, mov, int, asm, if, elif, else, op (32-bit),
-          while, for, import, global, extern, cli, sti, hlt, call, return, entel
-    """
-    variables = {}
-    labels = {}          # name -> code offset
-    fixups = []          # list of (pos_in_code, label) for E8/E9 rel32
-    code = bytearray()
-    data = bytearray()
-    unique_id = 0
-    
-    # 架构设置 - 默认为64位
-    architecture = "AMD64"  # 可以是 "86", "64", "AMD64"
-    machine_type = 0x8664   # AMD64 的机器类型
-    
-    # 设置程序入口点
-    entry_point = len(code)
+    try:
+        if not isinstance(stmts, (list, tuple)):
+            raise InvalidStatementError("语句必须是列表")
+            
+        # 确定架构
+        machine_type = IMAGE_FILE_MACHINE_AMD64
+        for st in stmts:
+            if st[0] == "entel":
+                arch = st[1].upper() if len(st) > 1 else "64"
+                machine_type = IMAGE_FILE_MACHINE_I386 if arch in ["86", "32", "X86"] else IMAGE_FILE_MACHINE_AMD64
+                break
 
-    # 模块系统相关
-    modules = {}        # 已导入的模块
-    global_funcs = {}   # 全局函数：name -> (code_offset, param_count)
-    extern_funcs = {}   # 外部函数：name -> (module_name, func_name)
-    
-    # 收集需要导入的函数
-    imported_functions = set()
-    
-    # 字符串地址表
-    string_addresses = {}
-    
-    def new_label(base="L"):
-        nonlocal unique_id
-        unique_id += 1
-        return f"{base}{unique_id}"
+        # 确定子系统类型
+        has_gui = any(st[0] == "msgbox" for st in stmts)
+        has_console = any(st[0] == "print" for st in stmts)
+        subsystem = "-mwindows" if (has_gui and not has_console) else "-mconsole"
 
-    def emit(b):
-        """append bytes to code"""
-        if isinstance(b, int):
-            code.append(b)
-        else:
-            code.extend(b)
-
-    def emit_data(b):
-        """append bytes to data"""
-        if isinstance(b, int):
-            data.append(b)
-        else:
-            data.extend(b)
-
-    # helper to allocate a memory variable (32-bit) and return offset
-    def alloc_mem_var(name, size=4):
-        offset = len(data)
-        emit_data(b'\x00' * size)
-        variables[name] = ('mem', offset)
-        return offset
-
-    # helper to get variable type and value/offset
-    def var_get(name):
-        if name not in variables:
-            # if unknown variable, auto-allocate as mem (4 bytes)
-            alloc_mem_var(name, 4)
-        return variables[name]
-
-    # emit mov reg, imm (supports 8-bit, 16-bit and 32-bit registers)
-    reg8_enc = {"al": 0xb0, "cl": 0xb1, "dl": 0xb2, "bl": 0xb3, "ah": 0xb4, "ch": 0xb5, "dh": 0xb6, "bh": 0xb7}
-    reg16_enc = {"ax": 0xb8, "cx": 0xb9, "dx": 0xba, "bx": 0xbb, "sp": 0xbc, "bp": 0xbd, "si": 0xbe, "di": 0xbf}
-    reg32_enc = {"eax": 0xb8, "ecx": 0xb9, "edx": 0xba, "ebx": 0xbb, "esp": 0xbc, "ebp": 0xbd, "esi": 0xbe, "edi": 0xbf}
-
-    def emit_mov_reg_imm(reg, val):
-        if reg in reg8_enc:
-            emit(bytes([reg8_enc[reg]] + [val & 0xff]))
-        elif reg in reg16_enc:
-            emit(bytes([0x66]) + bytes([reg16_enc[reg]]) + struct.pack("<H", val & 0xffff))
-        elif reg in reg32_enc:
-            emit(bytes([reg32_enc[reg]]) + struct.pack("<I", val & 0xffffffff))
-        else:
-            raise ValueError("Unsupported register for mov immediate: " + reg)
-
-    # mov reg, [moffs] for 32-bit: MOV EAX, moffs32 -> A1 moffs32
-    def emit_mov_reg_from_moffs8(reg, moffs):
-        # only AL supported for 8-bit moffs using A0
-        if reg != "al":
-            raise ValueError("Only AL supported for moffs8 in this helper")
-        emit(b'\xa0' + struct.pack('<I', moffs))
-
-    def emit_mov_reg_from_moffs16(reg, moffs):
-        if reg == "ax":
-            emit(b'\x66\xa1' + struct.pack('<I', moffs))
-        else:
-            raise ValueError("Only AX supported for moffs16 in this helper")
-
-    def emit_mov_reg_from_moffs32(reg, moffs):
-        if reg == "eax":
-            emit(b'\xa1' + struct.pack('<I', moffs))
-        else:
-            # generic approach: load address into something then use mov
-            emit(b'\xb8' + struct.pack('<I', moffs))  # mov eax, moffs
-            if reg == "ebx":
-                emit(b'\x8b\x18')  # mov ebx, [eax]
-            elif reg == "ecx":
-                emit(b'\x8b\x08')  # mov ecx, [eax]
-            elif reg == "edx":
-                emit(b'\x8b\x10')  # mov edx, [eax]
-            elif reg == "esi":
-                emit(b'\x8b\x30')  # mov esi, [eax]
-            elif reg == "edi":
-                emit(b'\x8b\x38')  # mov edi, [eax]
-            else:
-                raise ValueError("Unsupported register for moffs32 in this helper")
-
-    # mov [moffs], eax : opcode A3 moffs32
-    def emit_mov_moffs_from_eax(moffs):
-        emit(b'\xa3' + struct.pack('<I', moffs))
-
-    # top-level statement processor (handles a single stmt)
-    def process_statement(st):
-        nonlocal architecture, machine_type
-        t = st[0]
-        if t == "entel":
-            # 设置目标架构
-            arch = st[1].upper()
-            if arch in ["86", "32", "X86"]:
-                architecture = "X86"
-                machine_type = 0x014C  # IMAGE_FILE_MACHINE_I386
-            elif arch in ["64", "AMD64", "X64"]:
-                architecture = "AMD64"
-                machine_type = 0x8664  # IMAGE_FILE_MACHINE_AMD64
-            else:
-                raise ValueError(f"不支持的架构: {arch}，支持的架构有: 86, 64, AMD64")
-
-        elif t == "let":
-            # st = ("let", name, value)
-            name, val = st[1], st[2]
-            # if val is int -> const; else if string "mem" or none -> allocate mem
-            try:
-                ival = int(val)
-                variables[name] = ('const', ival)
-            except Exception:
-                # allocate as memory variable (4 bytes)
-                alloc_mem_var(name, 4)
-
-        elif t == "print_str":
-            s = st[1] + "\n"
-            # 在Windows中，我们可以使用MessageBoxA来显示字符串
-            # 首先在数据段中存储字符串
-            str_addr = len(data)
-            emit_data(s.encode('ascii') + b'\x00')
-            
-            # 记录字符串地址，用于后续修复
-            string_id = f'string_{len(code)}'
-            string_addresses[string_id] = 0x00402000 + str_addr
-            
-            # 添加到导入函数列表
-            imported_functions.add(('user32.dll', 'MessageBoxA'))
-            
-            # 调用MessageBoxA
-            # 参数: hWnd=0, lpText=字符串地址, lpCaption="Output", uType=0
-            emit(b'\x6a\x00')              # push 0 (uType)
-            emit(b'\x68\x00\x00\x00\x00')  # push "Output"
-            fixups.append(('fixup', len(code)-4, 'caption'))
-            emit(b'\x68\x00\x00\x00\x00')  # push 字符串地址
-            fixups.append(('fixup', len(code)-4, string_id))
-            emit(b'\x6a\x00')              # push 0 (hWnd)
-            
-            # 调用MessageBoxA
-            emit(b'\xb8\x00\x00\x00\x00')  # mov eax, MessageBoxA
-            fixups.append(('fixup', len(code)-4, 'MessageBoxA'))
-            emit(b'\xff\xd0')              # call eax
-
-        elif t == "print_var":
-            name = st[1]
-            typ, val = var_get(name)
-            if typ == 'const':
-                s = str(val)
-            else:
-                # 从内存中读取值
-                emit(b'\xa1' + struct.pack('<I', val))  # mov eax, [val]
-                emit(b'\x50')  # push eax
-                emit(b'\x6a\x40')  # push 64 (缓冲区大小)
-                emit(b'\x6a\x00')  # push 0 (初始化为0)
-                emit(b'\x6a\x00')  # push 0 (堆栈分配)
-                emit(b'\xb8\x00\x00\x00\x00')  # mov eax, _alloca
-                fixups.append(('fixup', len(code)-4, '_alloca'))
-                emit(b'\xff\xd0')  # call eax
-                
-                # 现在EAX指向缓冲区
-                emit(b'\x89\xc1')  # mov ecx, eax
-                emit(b'\x58')      # pop eax (值)
-                emit(b'\x50')      # push eax
-                emit(b'\x51')      # push ecx
-                emit(b'\x6a\x0a')  # push 10 (基数10)
-                emit(b'\xb8\x00\x00\x00\x00')  # mov eax, _itoa
-                fixups.append(('fixup', len(code)-4, '_itoa'))
-                emit(b'\xff\xd0')  # call eax
-                
-                # 现在ECX指向转换后的字符串
-                emit(b'\x51')  # push ecx
-                
-                # 添加到导入函数列表
-                imported_functions.add(('user32.dll', 'MessageBoxA'))
-                
-                # 调用MessageBoxA
-                emit(b'\x6a\x00')              # push 0 (uType)
-                emit(b'\x68\x00\x00\x00\x00')  # push "Output"
-                fixups.append(('fixup', len(code)-4, 'caption'))
-                emit(b'\x51')                  # push 字符串地址
-                emit(b'\x6a\x00')              # push 0 (hWnd)
-                
-                # 调用MessageBoxA
-                emit(b'\xb8\x00\x00\x00\x00')  # mov eax, MessageBoxA
-                fixups.append(('fixup', len(code)-4, 'MessageBoxA'))
-                emit(b'\xff\xd0')              # call eax
-
-        elif t == "exit":
-            # 添加到导入函数列表
-            imported_functions.add(('kernel32.dll', 'ExitProcess'))
-            
-            # 在Windows中，使用ExitProcess退出程序
-            emit(b'\x6a' + bytes([st[1] & 0xff]))  # push exit_code
-            emit(b'\xb8\x00\x00\x00\x00')  # mov eax, ExitProcess
-            fixups.append(('fixup', len(code)-4, 'ExitProcess'))
-            emit(b'\xff\xd0')  # call eax
-
-        elif t == "mov":
-            # ("mov", reg, val)
-            reg, val = st[1], st[2]
-            # if val is int -> immediate; if variable name -> load constant if const else load mem offset as immediate (compile-time)
-            try:
-                ival = int(val)
-                emit_mov_reg_imm(reg, ival)
-            except Exception:
-                # val is variable
-                typ, v = var_get(val)
-                if typ == 'const':
-                    emit_mov_reg_imm(reg, v)
-                else:
-                    # memory variable: load from moffs into register depending on reg
-                    if reg in ("eax",):
-                        emit_mov_reg_from_moffs32("eax", v)
-                    elif reg in ("ebx", "ecx", "edx", "esi", "edi"):
-                        emit_mov_reg_from_moffs32(reg, v)
-                    elif reg in ("ax",):
-                        emit_mov_reg_from_moffs16("ax", v)
-                    elif reg in ("al",):
-                        emit_mov_reg_from_moffs8("al", v)
-                    else:
-                        raise ValueError("mov from mem unsupported for reg: " + reg)
-
-        elif t == "int":
-            # 在Windows中，int指令通常不直接使用，而是通过API调用
-            # 这里我们生成对应的机器码，但实际运行可能不会按预期工作
-            emit(b"\xcd" + bytes([st[1] & 0xff]))
-
-        elif t == "asm":
-            # st[1]: "xx yy zz"
-            for byte in st[1].split():
-                emit(bytes([int(byte, 16)]))
-                
-        elif t == "if":
-            # 比较变量值是否为真（非零）
-            var_name = st[1]
-            typ, val = variables[var_name]
-            if typ == 'const':
-                emit(b'\xb8' + struct.pack('<I', val))  # mov eax, val
-            else:
-                emit(b'\xa1' + struct.pack('<I', val))  # mov eax, [val]
-            emit(b'\x85\xc0')  # test eax, eax
-            # 如果条件为假，跳转到标签
-            pos = len(code)
-            emit(b'\x0f\x84\x00\x00\x00\x00')  # jz rel32 placeholder
-            fixups.append(('jz', pos + 2, st[2]))  # 记录需要修复的位置和目标标签
-
-        elif t == "elif":
-            # 比较变量值是否为真（非零）
-            var_name = st[1]
-            typ, val = variables[var_name]
-            if typ == 'const':
-                emit(b'\xb8' + struct.pack('<I', val))  # mov eax, val
-            else:
-                emit(b'\xa1' + struct.pack('<I', val))  # mov eax, [val]
-            emit(b'\x85\xc0')  # test eax, eax
-            # 如果条件为假，跳转到标签
-            pos = len(code)
-            emit(b'\x0f\x85\x00\x00\x00\x00')  # jnz rel32 placeholder
-            fixups.append(('jnz', pos + 2, st[2]))  # 记录需要修复的位置和目标标签
-
-        elif t == "else":
-            # 无条件跳转到标签
-            pos = len(code)
-            emit(b'\xe9\x00\x00\x00\x00')  # jmp rel32 placeholder
-            fixups.append(('jmp', pos + 1, st[1]))  # 记录需要修复的位置和目标标签
-
-        elif t == "op":
-            # ("op", dest, src1, op, src2)  - use 32-bit arithmetic, result stored into dest (mem var)
-            dest, src1, oper, src2 = st[1], st[2], st[3], st[4]
-            # ensure dest is memory variable
-            if dest not in variables or variables[dest][0] != 'mem':
-                alloc_mem_var(dest, 4)
-            dest_off = variables[dest][1]
-
-            # load src1 -> EAX
-            try:
-                v1 = int(src1)
-                emit_mov_reg_imm("eax", v1 & 0xffffffff)
-            except Exception:
-                typ1, v1 = var_get(src1)
-                if typ1 == 'const':
-                    emit_mov_reg_imm("eax", v1 & 0xffffffff)
-                else:
-                    emit_mov_reg_from_moffs32("eax", v1)
-
-            # load src2 -> EBX
-            try:
-                v2 = int(src2)
-                emit_mov_reg_imm("ebx", v2 & 0xffffffff)
-            except Exception:
-                typ2, v2 = var_get(src2)
-                if typ2 == 'const':
-                    emit_mov_reg_imm("ebx", v2 & 0xffffffff)
-                else:
-                    emit_mov_reg_from_moffs32("ebx", v2)
-
-            # perform operation on EAX, EBX
-            if oper == '+':
-                emit(b'\x01\xd8')  # add eax, ebx
-            elif oper == '-':
-                emit(b'\x29\xd8')  # sub eax, ebx
-            elif oper == '*':
-                emit(b'\xf7\xe3')  # mul ebx
-            elif oper == '/':
-                emit(b'\x99')  # cdq
-                emit(b'\xf7\xf3')  # idiv ebx
-            else:
-                raise ValueError("Unsupported op: " + oper)
-
-            # store EAX into dest moffs (mov [moffs], eax) -> opcode A3 moffs32
-            emit_mov_moffs_from_eax(dest_off)
-
-            # also update compile-time data so later print_var / op can read it
-            # Try constant-folding when possible:
-            const_fold = None
-            try:
-                a1 = int(src1)
-            except:
-                typ1, v1 = var_get(src1)
-                if typ1 == 'const':
-                    a1 = v1
-                else:
-                    a1 = None
-            try:
-                a2 = int(src2)
-            except:
-                typ2, v2 = var_get(src2)
-                if typ2 == 'const':
-                    a2 = v2
-                else:
-                    a2 = None
-            if a1 is not None and a2 is not None:
-                if oper == '+': const_fold = (a1 + a2) & 0xffffffff
-                elif oper == '-': const_fold = (a1 - a2) & 0xffffffff
-                elif oper == '*': const_fold = (a1 * a2) & 0xffffffff
-                elif oper == '/':
-                    const_fold = (a1 // a2) & 0xffffffff if a2 != 0 else 0
-            if const_fold is not None:
-                data[dest_off:dest_off+4] = struct.pack("<I", const_fold)
-
-        elif t == "cli":
-            # 在Windows用户空间中，CLI指令没有实际效果，但可以生成对应的机器码
-            emit(b'\xfa')  # CLI
-
-        elif t == "sti":
-            # 在Windows用户空间中，STI指令没有实际效果，但可以生成对应的机器码
-            emit(b'\xfb')  # STI
-
-        elif t == "hlt":
-            # 添加到导入函数列表
-            imported_functions.add(('kernel32.dll', 'ExitProcess'))
-            
-            # 在Windows用户空间中，HLT指令会导致程序终止，我们可以用ExitProcess替代
-            emit(b'\x6a\x00')  # push 0 (exit code)
-            emit(b'\xb8\x00\x00\x00\x00')  # mov eax, ExitProcess
-            fixups.append(('fixup', len(code)-4, 'ExitProcess'))
-            emit(b'\xff\xd0')  # call eax
-            
-        elif t == "while":
-            # ("while", condition, block_statements)
-            condition, block_stmts = st[1], st[2]
-            
-            # 创建循环开始和结束标签
-            loop_start = new_label("while_start")
-            loop_end = new_label("while_end")
-            
-            # 设置循环开始标签
-            labels[loop_start] = len(code)
-            
-            # 生成条件检查代码
-            var_name = condition
-            typ, val = variables[var_name]
-            if typ == 'const':
-                emit(b'\xb8' + struct.pack('<I', val))  # mov eax, val
-            else:
-                emit(b'\xa1' + struct.pack('<I', val))  # mov eax, [val]
-            emit(b'\x85\xc0')  # test eax, eax
-            
-            # 如果条件为假，跳转到循环结束
-            pos = len(code)
-            emit(b'\x0f\x84\x00\x00\x00\x00')  # jz rel32 placeholder
-            fixups.append(('jz', pos + 2, loop_end))
-            
-            # 处理循环体
-            for s in block_stmts:
-                process_statement(s)
-            
-            # 跳回循环开始
-            pos_jmp = len(code)
-            emit(b'\xe9\x00\x00\x00\x00')  # jmp rel32 placeholder
-            fixups.append(('jmp', pos_jmp + 1, loop_start))
-            
-            # 设置循环结束标签
-            labels[loop_end] = len(code)
-            
-        elif t == "for":
-            # ("for", var, start, end, step, block_statements)
-            var_name, start_val, end_val, step_val, block_stmts = st[1], st[2], st[3], st[4], st[5]
-            
-            # 确保循环变量存在
-            if var_name not in variables:
-                alloc_mem_var(var_name, 4)
-            
-            # 创建循环开始和结束标签
-            loop_start = new_label("for_start")
-            loop_end = new_label("for_end")
-            
-            # 初始化循环变量
-            try:
-                start = int(start_val)
-                emit(b'\xb8' + struct.pack('<I', start))  # mov eax, start
-            except ValueError:
-                typ, start = variables[start_val]
-                if typ == 'const':
-                    emit(b'\xb8' + struct.pack('<I', start))  # mov eax, start
-                else:
-                    emit(b'\xa1' + struct.pack('<I', start))  # mov eax, [start]
-            
-            # 保存初始值到循环变量
-            var_off = variables[var_name][1]
-            emit_mov_moffs_from_eax(var_off)
-            
-            # 设置循环开始标签
-            labels[loop_start] = len(code)
-            
-            # 加载循环变量到EAX
-            emit(b'\xa1' + struct.pack('<I', var_off))  # mov eax, [var_off]
-            
-            # 加载结束值到EBX
-            try:
-                end = int(end_val)
-                emit(b'\xbb' + struct.pack('<I', end))  # mov ebx, end
-            except ValueError:
-                typ, end = variables[end_val]
-                if typ == 'const':
-                    emit(b'\xbb' + struct.pack('<I', end))  # mov ebx, end
-                else:
-                    emit(b'\x8b\x1d' + struct.pack('<I', end))  # mov ebx, [end]
-            
-            # 比较EAX和EBX
-            emit(b'\x39\xc3')  # cmp eax, ebx
-            
-            # 如果EAX < EBX，跳转到循环结束（假设是递增循环）
-            pos = len(code)
-            emit(b'\x0f\x8f\x00\x00\x00\x00')  # jg rel32 placeholder
-            fixups.append(('jg', pos + 2, loop_end))
-            
-            # 处理循环体
-            for s in block_stmts:
-                process_statement(s)
-            
-            # 更新循环变量
-            emit(b'\xa1' + struct.pack('<I', var_off))  # mov eax, [var_off]
-            
-            try:
-                step = int(step_val)
-                emit(b'\xbb' + struct.pack('<I', step))  # mov ebx, step
-            except ValueError:
-                typ, step = variables[step_val]
-                if typ == 'const':
-                    emit(b'\xbb' + struct.pack('<I', step))  # mov ebx, step
-                else:
-                    emit(b'\x8b\x1d' + struct.pack('<I', step))  # mov ebx, [step]
-            
-            # EAX = EAX + EBX
-            emit(b'\x01\xd8')  # add eax, ebx
-            
-            # 保存更新后的值
-            emit_mov_moffs_from_eax(var_off)
-            
-            # 跳回循环开始
-            pos_jmp = len(code)
-            emit(b'\xe9\x00\x00\x00\x00')  # jmp rel32 placeholder
-            fixups.append(('jmp', pos_jmp + 1, loop_start))
-            
-            # 设置循环结束标签
-            labels[loop_end] = len(code)
-
-        elif t == "global":
-            # ("global", func_name, param_count, block_statements)
-            func_name, param_count, block_stmts = st[1], st[2], st[3]
-            
-            # 记录全局函数信息
-            global_funcs[func_name] = (len(code), param_count)
-            
-            # 创建函数标签
-            labels[func_name] = len(code)
-            
-            # 处理函数体
-            for s in block_stmts:
-                process_statement(s)
-            
-            # 函数返回
-            emit(b'\xc3')  # RET
-            
-        elif t == "extern":
-            # ("extern", func_name, module_name)
-            func_name, module_name = st[1], st[2]
-            
-            # 记录外部函数信息
-            extern_funcs[func_name] = (module_name, func_name)
-            
-            # 添加到导入函数列表
-            imported_functions.add((module_name, func_name))
+        # 生成C源码
+        c_code = generate_c_source(stmts, machine_type)
         
-        elif t == "import":
-            # ("import", module_name)
-            module_name = st[1]
+        # 创建临时目录
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_c = os.path.join(temp_dir, "temp_program.c")
+            temp_exe = os.path.join(temp_dir, "program.exe")
             
-            # 检查模块是否已导入
-            if module_name not in modules:
-                # 尝试加载模块
-                try:
-                    # 这里简化处理，实际应该从文件加载模块
-                    modules[module_name] = {
-                        'functions': {},  # 模块中的函数
-                        'variables': {},  # 模块中的变量
-                        'code': bytearray(),  # 模块的代码
-                        'data': bytearray()   # 模块的数据
-                    }
-                except Exception as e:
-                    raise ValueError(f"Failed to import module {module_name}: {str(e)}")
-                    
-        elif t == "call":
-            # ("call", func_name, args)
-            func_name, args = st[1], st[2]
-            
-            # 检查是否是全局函数
-            if func_name in global_funcs:
-                func_offset, param_count = global_funcs[func_name]
-                
-                # 检查参数数量是否匹配
-                if len(args) != param_count:
-                    raise ValueError(f"Function {func_name} expects {param_count} arguments, got {len(args)}")
-                
-                # 将参数压栈
-                for i, arg in enumerate(args):
-                    try:
-                        val = int(arg)
-                        emit(b'\xb8' + struct.pack('<I', val))  # mov eax, val
-                    except ValueError:
-                        typ, val = variables[arg]
-                        if typ == 'const':
-                            emit(b'\xb8' + struct.pack('<I', val))  # mov eax, val
-                        else:
-                            emit(b'\xa1' + struct.pack('<I', val))  # mov eax, [val]
-                    
-                    # 压栈
-                    emit(b'\x50')  # push eax
-                
-                # 调用函数
-                pos = len(code)
-                emit(b'\xe8\x00\x00\x00\x00')  # call rel32 placeholder
-                fixups.append(('call', pos + 1, func_name))
-                
-                # 清理栈
-                if param_count < 0:
-                    emit(b'\x81\xc4' + struct.pack('<I', param_count * 4))  # add esp, param_count * 4
-            
-            # 检查是否是外部函数
-            elif func_name in extern_funcs:
-                module_name, extern_func_name = extern_funcs[func_name]
-                
-                # 检查模块是否已导入
-                if module_name not in modules:
-                    raise ValueError(f"Module {module_name} not imported")
-                
-                # 检查函数是否存在于模块中
-                if extern_func_name not in modules[module_name]['functions']:
-                    raise ValueError(f"Function {extern_func_name} not found in module {module_name}")
-                
-                # 获取函数信息
-                func_offset, param_count = modules[module_name]['functions'][extern_func_name]
-                
-                # 检查参数数量是否匹配
-                if len(args) != param_count:
-                    raise ValueError(f"Function {func_name} expects {param_count} arguments, got {len(args)}")
-                
-                # 将参数压栈
-                for i, arg in enumerate(args):
-                    try:
-                        val = int(arg)
-                        emit(b'\xb8' + struct.pack('<I', val))  # mov eax, val
-                    except ValueError:
-                        typ, val = variables[arg]
-                        if typ == 'const':
-                            emit(b'\xb8' + struct.pack('<I', val))  # mov eax, val
-                        else:
-                            emit(b'\xa1' + struct.pack('<I', val))  # mov eax, [val]
-                    
-                    # 压栈
-                    emit(b'\x50')  # push eax
-                
-                # 调用函数
-                pos = len(code)
-                emit(b'\xe8\x00\x00\x00\x00')  # call rel32 placeholder
-                fixups.append(('call', pos + 1, f"{module_name}.{extern_func_name}"))
-                
-                # 清理栈
-                if param_count < 0:
-                    emit(b'\x81\xc4' + struct.pack('<I', param_count * 4))  # add esp, param_count * 4
-            
-            else:
-                raise ValueError(f"Unknown function: {func_name}")
-                
-        elif t == "return":
-            # st = ("return", ret_val)
-            ret_val = st[1]  # 可能为None，表示无返回值
-            
-            if ret_val is not None:
-                # 有返回值，将返回值放入EAX寄存器
-                try:
-                    # 尝试解析为整数
-                    val = int(ret_val, 0)
-                    emit(b'\xb8' + struct.pack('<I', val))  # mov eax, val
-                except ValueError:
-                    # 不是整数，可能是变量
-                    typ, val = variables[ret_val]
-                    if typ == 'const':
-                        emit(b'\xb8' + struct.pack('<I', val))  # mov eax, val
-                    else:
-                        emit(b'\xa1' + struct.pack('<I', val))  # mov eax, [val]
-            
-            # 使用RET指令返回
-            emit(b'\xc3')  # RET
-            
-        elif t in ["inb", "inw", "inl", "outb", "outw", "outl"]:
-            port = int(st[1].strip(','), 0)
-            if t in ["outb", "outw", "outl"]:
-                value = int(st[2].strip(','), 0)
-            
-            # 在Windows用户空间中，直接访问I/O端口需要特殊权限
-            # 我们可以使用DeviceIoControl API，但这需要驱动程序支持
-            # 这里我们生成对应的机器码，但实际运行可能需要特殊权限
-            
-            if t == "inb":
-                emit(b'\xb0')  # mov al, imm8
-                emit(port & 0xff)
-                emit(b'\xe4')  # in al, imm8
-            elif t == "inw":
-                emit(b'\x66')  # operand-size override (16-bit)
-                emit(b'\xb8')  # mov ax, imm16
-                emit(struct.pack("<H", port & 0xffff))
-                emit(b'\xed')  # in ax, dx
-            elif t == "inl":
-                emit(b'\xb8')  # mov eax, imm32
-                emit(struct.pack("<I", port & 0xffffffff))
-                emit(b'\xed')  # in eax, dx
-            elif t == "outb":
-                emit(b'\xb0')  # mov al, imm8
-                emit(value & 0xff)
-                emit(b'\xe6')  # out imm8, al
-                emit(port & 0xff)
-            elif t == "outw":
-                emit(b'\x66')  # operand-size override (16-bit)
-                emit(b'\xb8')  # mov ax, imm16
-                emit(struct.pack("<H", value & 0xffff))
-                emit(b'\xef')  # out dx, ax
-                emit(struct.pack("<H", port & 0xffff))
-            elif t == "outl":
-                emit(b'\xb8')  # mov eax, imm32
-                emit(struct.pack("<I", value & 0xffffffff))
-                emit(b'\xef')  # out dx, eax
-                emit(struct.pack("<H", port & 0xffff))
-                
-        elif t == "read_cmos":
-            # st = ("read_cmos", addr, var)
-            addr = int(st[1], 0)
-            var_name = st[2]  # 可能为None，表示使用默认变量
-            
-            # 确保有一个变量来存储结果
-            if var_name is None:
-                var_name = "cmos_result"
-            
-            # 确保变量存在，如果不存在则创建
-            if var_name not in variables:
-                alloc_mem_var(var_name, 4)  # 分配4字节，确保有足够空间
-            
-            var_off = variables[var_name][1]
-            
-            # 在Windows用户空间中，直接访问CMOS需要特殊权限
-            # 我们可以使用DeviceIoControl API，但这需要驱动程序支持
-            # 这里我们生成对应的机器码，但实际运行可能需要特殊权限
-            
-            # 禁用中断
-            emit(b'\xfa')  # CLI
-            
-            # 读取CMOS的汇编代码
-            # 1. 设置要读取的CMOS地址
-            emit(b'\xb0')  # MOV AL, imm8
-            emit(addr & 0xFF)
-            emit(b'\xe6')  # OUT imm8, AL
-            emit(0x70)     # CMOS地址端口
-            
-            # 2. 从CMOS数据端口读取
-            emit(b'\xe4')  # IN AL, imm8
-            emit(0x71)     # CMOS数据端口
-            
-            # 3. 将AL零扩展到EAX（高字节置零）
-            emit(b'\x31\xc0')  # XOR EAX, EAX (清零EAX)
-            emit(b'\x8a\xc8')  # MOV CL, AL
-            emit(b'\x88\xc2')  # MOV DL, AL
-            emit(b'\x89\xc0')  # MOV EAX, EAX
-            
-            # 4. 保存结果到变量
-            emit_mov_moffs_from_eax(var_off)
-            
-            # 恢复中断
-            emit(b'\xfb')  # STI
-            
-        elif t == "read_fat12_hdr" or t == "read_fat16_hdr":
-            # st = ("read_fat12_hdr" or "read_fat16_hdr", var_name, offset)
-            var_name = st[1]  # 可能为None，表示使用默认变量
-            offset = int(st[2], 0)
-            
-            # 确保有一个变量来存储结果
-            if var_name is None:
-                var_name = "fat_hdr_value"
-            
-            # 确保变量存在，如果不存在则创建
-            if var_name not in variables:
-                alloc_mem_var(var_name, 4)  # 分配4字节，确保有足够空间
-            
-            var_off = variables[var_name][1]
-            
-            # 添加到导入函数列表
-            imported_functions.add(('kernel32.dll', 'CreateFileA'))
-            imported_functions.add(('kernel32.dll', 'ReadFile'))
-            imported_functions.add(('kernel32.dll', 'CloseHandle'))
-            
-            # 在Windows中，我们不能直接访问磁盘，需要使用文件系统API
-            # 这里我们使用CreateFile和ReadFile API
-            
-            # 1. 打开文件（这里简化处理，实际应该使用适当的API）
-            emit(b'\x68\x00\x00\x00\x00')  # push 0 (hTemplateFile)
-            emit(b'\x68\x80\x00\x00\x00')  # push FILE_ATTRIBUTE_NORMAL
-            emit(b'\x68\x03\x00\x00\x00')  # push OPEN_EXISTING
-            emit(b'\x68\x00\x00\x00\x00')  # push 0 (lpSecurityAttributes)
-            emit(b'\x68\x01\x00\x00\x00')  # push FILE_SHARE_READ
-            emit(b'\x68\xc0\x00\x00\x00')  # push GENERIC_READ
-            emit(b'\x68\x00\x00\x00\x00')  # push lpFileName (这里简化处理)
-            fixups.append(('fixup', len(code)-4, 'filename'))
-            emit(b'\xb8\x00\x00\x00\x00')  # mov eax, CreateFileA
-            fixups.append(('fixup', len(code)-4, 'CreateFileA'))
-            emit(b'\xff\xd0')  # call eax
-            
-            # 2. 读取文件
-            emit(b'\x8b\xf0')  # mov esi, eax (保存文件句柄)
-            emit(b'\x6a\x00')  # push 0 (lpOverlapped)
-            emit(b'\x68\x00\x00\x00\x00')  # push pNumberOfBytesRead
-            emit(b'\x68\x01\x00\x00\x00')  # push nNumberOfBytesToRead (1)
-            emit(b'\x68\x00\x00\x00\x00')  # push lpBuffer (这里简化处理)
-            fixups.append(('fixup', len(code)-4, 'buffer'))
-            emit(b'\x56')  # push esi (hFile)
-            emit(b'\xb8\x00\x00\x00\x00')  # mov eax, ReadFile
-            fixups.append(('fixup', len(code)-4, 'ReadFile'))
-            emit(b'\xff\xd0')  # call eax
-            
-            # 3. 关闭文件
-            emit(b'\x56')  # push esi (hFile)
-            emit(b'\xb8\x00\x00\x00\x00')  # mov eax, CloseHandle
-            fixups.append(('fixup', len(code)-4, 'CloseHandle'))
-            emit(b'\xff\xd0')  # call eax
-            
-            # 4. 从缓冲区读取指定偏移的值
-            emit(b'\xb8\x00\x00\x00\x00')  # mov eax, buffer
-            fixups.append(('fixup', len(code)-4, 'buffer'))
-            emit(b'\x8b\x58')              # mov ebx, [eax + offset]
-            emit(struct.pack('<I', offset))
-            
-            # 5. 保存结果到变量
-            emit(b'\x89\x1d')              # mov [var_off], ebx
-            emit(struct.pack('<I', var_off))
-            
-        elif t == "beep":
-            # 添加到导入函数列表
-            imported_functions.add(('user32.dll', 'MessageBeep'))
-            
-            # 在Windows中，我们可以使用MessageBeep API来发出声音
-            emit(b'\x6a\x00')  # push 0 (MB_OK)
-            emit(b'\xb8\x00\x00\x00\x00')  # mov eax, MessageBeep
-            fixups.append(('fixup', len(code)-4, 'MessageBeep'))
-            emit(b'\xff\xd0')  # call eax
-            
-        else:
-            raise ValueError("Unknown statement type: " + str(t))
+            # 写入C源码
+            with open(temp_c, "w", encoding="utf-8") as f:
+                f.write(c_code)
 
-    # ---- main loop: iterate statements ----
+            # 构建编译命令
+            gcc_cmd = ["gcc"]
+            if machine_type == IMAGE_FILE_MACHINE_I386:
+                gcc_cmd.extend(["-m32"])
+            else:
+                gcc_cmd.extend(["-m64"])
+            gcc_cmd.extend([
+                "-O2",  # 优化级别
+                "-static",  # 静态链接
+                "-static-libgcc",  # 静态链接GCC运行时
+                "-static-libstdc++",  # 静态链接C++运行时
+                "-Wl,--subsystem,console" if subsystem == "-mconsole" else "-Wl,--subsystem,windows",
+                "-Wall",  # 开启所有警告
+                "-Wextra",  # 额外警告
+                "-Werror",  # 将警告视为错误
+                "-Wno-unused-parameter",  # 忽略未使用参数警告
+                temp_c,
+                "-o", temp_exe
+            ])
+
+            # 执行编译
+            try:
+                result = subprocess.run(
+                    gcc_cmd,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    cwd=temp_dir
+                )
+                if result.stdout:
+                    logger.debug(f"GCC输出: {result.stdout}")
+                if result.stderr:
+                    logger.warning(f"GCC警告: {result.stderr}")
+                
+                # 读取编译结果
+                with open(temp_exe, "rb") as f:
+                    pe_content = f.read()
+                
+                logger.info(f"编译成功，生成PE文件大小: {len(pe_content)}字节")
+                return pe_content
+                
+            except subprocess.CalledProcessError as e:
+                error_msg = f"GCC编译失败: {e.stderr if e.stderr else str(e)}"
+                logger.error(error_msg)
+                raise CompilationError(error_msg)
+
+    except Exception as e:
+        if isinstance(e, (InvalidStatementError, CompilationError)):
+            raise
+        logger.error(f"程序生成失败: {str(e)}")
+        raise PEBuilderError(f"程序生成失败: {str(e)}")
+
+def generate_c_source(stmts: List[List[str]], machine_type: int) -> str:
+    """将语句转换为C源码
     
-    # 添加简单的控制台程序入口点
-    # 添加到导入函数列表
-    imported_functions.add(('kernel32.dll', 'ExitProcess'))
+    Args:
+        stmts: 语句列表
+        machine_type: 目标架构类型
+        
+    Returns:
+        str: 生成的C源码
+    """
+    c_code = []
     
-    emit(b'\x6a\x00')  # push 0 (exit code)
-    emit(b'\xb8\x00\x00\x00\x00')  # mov eax, ExitProcess
-    fixups.append(('fixup', len(code)-4, 'ExitProcess'))
-    emit(b'\xff\xd0')  # call eax
+    # 添加必要的头文件和定义
+    headers = [
+        "#include <windows.h>",
+        "#include <stdio.h>",
+        "#include <stdlib.h>",
+        "#pragma comment(lib, \"user32.lib\")",
+        "#pragma comment(lib, \"kernel32.lib\")",
+        "#pragma comment(lib, \"shell32.lib\")",
+        "#define _CRT_SECURE_NO_WARNINGS"
+    ]
+    c_code.extend(headers)
     
+    # 添加版本信息结构
+    version_info = [
+        "#ifndef VS_VERSION_INFO",
+        "#define VS_VERSION_INFO 1",
+        "#endif",
+        "",
+        "VS_VERSION_INFO VERSIONINFO",
+        "FILEVERSION 1,0,0,0",
+        "PRODUCTVERSION 1,0,0,0",
+        "FILEFLAGSMASK 0x3fL",
+        "#ifdef _DEBUG",
+        "FILEFLAGS 0x1L",
+        "#else",
+        "FILEFLAGS 0x0L",
+        "#endif",
+        "FILEOS 0x40004L",
+        "FILETYPE 0x1L",
+        "FILESUBTYPE 0x0L",
+        "BEGIN",
+        "    BLOCK \"StringFileInfo\"",
+        "    BEGIN",
+        "        BLOCK \"040904b0\"",
+        "        BEGIN",
+        "            VALUE \"CompanyName\", \"Generated by PE Builder\"",
+        "            VALUE \"FileDescription\", \"Generated Windows Program\"",
+        "            VALUE \"FileVersion\", \"1.0.0.0\"",
+        "            VALUE \"InternalName\", \"program\"",
+        "            VALUE \"LegalCopyright\", \"Copyright (C) 2024\"",
+        "            VALUE \"OriginalFilename\", \"program.exe\"",
+        "            VALUE \"ProductName\", \"Generated by PE Builder\"",
+        "            VALUE \"ProductVersion\", \"1.0.0.0\"",
+        "        END",
+        "    END",
+        "    BLOCK \"VarFileInfo\"",
+        "    BEGIN",
+        "        VALUE \"Translation\", 0x409, 1200",
+        "    END",
+        "END"
+    ]
+    c_code.extend(version_info)
+    
+    # 生成主函数
+    c_code.append("int main() {")
+    
+    # 处理每个语句
     for st in stmts:
-        process_statement(st)
-
-    # ---- resolve fixups ----
-    # 首先处理API调用和标签跳转
-    
-    # 在数据段中添加必要的字符串
-    # 添加"Output"字符串，用于MessageBoxA的标题
-    caption_addr = len(data)
-    emit_data(b"Output\0")
-    
-    # 更新字符串地址表
-    string_addresses['caption'] = 0x00402000 + caption_addr
-    
-    # 处理所有fixup
-    for item in list(fixups):
-        if item[0] == 'fixup':
-            pos, name = item[1], item[2]
-            if name in string_addresses:
-                code[pos:pos+4] = struct.pack('<I', string_addresses[name])
-            elif name in labels:
-                code[pos:pos+4] = struct.pack('<I', labels[name])
-            else:
-                # 对于API调用，我们将在链接时解析地址
-                # 这里先保留fixup，稍后处理
-                continue
-            fixups.remove(item)
-        elif isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], int):
-            pos, label = item
-            # 处理特殊标签 "$"（表示当前地址）
-            if label == "$":
-                target = pos  # 跳转到当前指令位置（即无限循环）
-            # 处理模块函数调用
-            elif "." in label:
-                module_name, func_name = label.split(".", 1)
-                if module_name not in modules:
-                    raise ValueError(f"Unknown module in fixups: {module_name}")
-                if func_name not in modules[module_name]['functions']:
-                    raise ValueError(f"Unknown function {func_name} in module {module_name}")
-                target = modules[module_name]['functions'][func_name][0]
-            # 处理普通标签
-            elif label not in labels:
-                raise ValueError("Unknown label in fixups: " + label)
-            else:
-                target = labels[label]
+        if not st or st[0] == "entel":
+            continue
             
-            # E8 rel32 at pos: code[pos] == 0xE8 ; rel = target - (pos + 5)
-            if code[pos] == 0xE8:  # call指令
-                rel = target - (pos + 5)
-                code[pos+1:pos+5] = struct.pack("<i", rel)
-            # E9 rel32 at pos: code[pos] == 0xE9 ; rel = target - (pos + 5)
-            elif code[pos] == 0xE9:  # jmp指令
-                rel = target - (pos + 5)
-                code[pos+1:pos+5] = struct.pack("<i", rel)
-            # 0F 84 rel32 at pos: jz指令
-            elif code[pos] == 0x0F and code[pos+1] == 0x84:  # jz指令
-                rel = target - (pos + 6)
-                code[pos+2:pos+6] = struct.pack("<i", rel)
-            # 0F 85 rel32 at pos: jnz指令
-            elif code[pos] == 0x0F and code[pos+1] == 0x85:  # jnz指令
-                rel = target - (pos + 6)
-                code[pos+2:pos+6] = struct.pack("<i", rel)
-            # 0F 8F rel32 at pos: jg指令
-            elif code[pos] == 0x0F and code[pos+1] == 0x8F:  # jg指令
-                rel = target - (pos + 6)
-                code[pos+2:pos+6] = struct.pack("<i", rel)
+        if st[0] == "msgbox":
+            msg = st[1] if len(st) > 1 else "Hello"
+            caption = st[2] if len(st) > 2 else "Message"
+            # 转义特殊字符
+            msg = msg.replace('"', '\\"').replace('\n', '\\n')
+            caption = caption.replace('"', '\\"').replace('\n', '\\n')
+            c_code.append(f'MessageBoxA(NULL, "{msg}", "{caption}", MB_OK);')
             
-            fixups.remove(item)
+        elif st[0] == "print":
+            text = st[1] if len(st) > 1 else ""
+            # 转义特殊字符
+            text = text.replace('"', '\\"').replace('\n', '\\n')
+            c_code.append(f'printf("{text}\\n");')
+            
+        elif st[0] == "exit":
+            exit_code = st[1] if len(st) > 1 else 0
+            c_code.append(f"return {exit_code};")
+            
+        elif st[0] == "sleep":
+            duration = st[1] if len(st) > 1 else 1000
+            c_code.append(f'Sleep({duration});')
+            
+        elif st[0] == "openurl":
+            url = st[1] if len(st) > 1 else ""
+            url = url.replace('"', '\\"')
+            c_code.append(f'ShellExecuteA(NULL, "open", "{url}", NULL, NULL, SW_SHOW);')
     
-    # === 修复 fixups ===
-    for kind, pos, target in fixups:
-        if kind == "call":
-            # 内部函数调用
-            if target not in labels:
-                raise ValueError(f"Undefined function label: {target}")
-            addr = labels[target]
-            rel = addr - (pos + 5)  # E8 相对跳转，修正偏移计算
-            code[pos:pos+5] = b'\xe8' + struct.pack("<i", rel)
-        elif kind == "jmp":
-            # 无条件跳转
-            if target not in labels:
-                raise ValueError(f"Undefined label: {target}")
-            addr = labels[target]
-            rel = addr - (pos + 5)  # E9 相对跳转，修正偏移计算
-            code[pos:pos+5] = b'\xe9' + struct.pack("<i", rel)
-        elif kind == "jz":
-            # 条件跳转 (等于)
-            if target not in labels:
-                raise ValueError(f"Undefined label: {target}")
-            addr = labels[target]
-            rel = addr - (pos + 6)  # 0F 84 相对跳转，修正偏移计算
-            code[pos:pos+6] = b'\x0f\x84' + struct.pack("<i", rel)
-        elif kind == "jnz":
-            # 条件跳转 (不等于)
-            if target not in labels:
-                raise ValueError(f"Undefined label: {target}")
-            addr = labels[target]
-            rel = addr - (pos + 6)  # 0F 85 相对跳转，修正偏移计算
-            code[pos:pos+6] = b'\x0f\x85' + struct.pack("<i", rel)
-        elif kind == "jg":
-            # 条件跳转 (大于)
-            if target not in labels:
-                raise ValueError(f"Undefined label: {target}")
-            addr = labels[target]
-            rel = addr - (pos + 6)  # 0F 8F 相对跳转，修正偏移计算
-            code[pos:pos+6] = b'\x0f\x8f' + struct.pack("<i", rel)
-        elif kind == "fixup":
-            # 外部函数调用（API）或字符串地址
-            if target in string_addresses:
-                addr = string_addresses[target]
-                code[pos:pos+4] = struct.pack("<I", addr)
-            else:
-                # 对于API调用，我们将在链接时解析地址
-                # 这里先保留为0，由PE加载器解析
-                code[pos:pos+4] = struct.pack("<I", 0)
-        else:
-            raise ValueError(f"Unknown fixup type: {kind}")
+    c_code.append("}")
+    return "\n".join(c_code)
 
-    # 返回生成的PE文件，传递机器类型和导入函数列表
-    return make_pe(code, data, machine_type, imported_functions)
+# 示例用法
+if __name__ == "__main__":
+    # 32位GUI程序示例
+    program_gui = [
+        ["entel", "32"],
+        ["msgbox", "Hello 32-bit GUI!", "Test"],
+        ["sleep", "2000"],
+        ["exit", 0]
+    ]
+    try:
+        pe_gui = gen_windows(program_gui)
+        with open("pe_gui_32.exe", "wb") as f:
+            f.write(pe_gui)
+        print("32位GUI程序生成: pe_gui_32.exe")
+    except Exception as e:
+        print(f"32位生成失败: {e}")
 
+    # 64位控制台程序示例
+    program_console = [
+        ["entel", "64"],
+        ["print", "Hello 64-bit Console!"],
+        ["sleep", "1000"],
+        ["print", "This is a test program."],
+        ["exit", 0]
+    ]
+    try:
+        pe_console = gen_windows(program_console)
+        with open("pe_console_64.exe", "wb") as f:
+            f.write(pe_console)
+        print("64位控制台程序生成: pe_console_64.exe")
+    except Exception as e:
+        print(f"64位生成失败: {e}")
+
+    # 带URL打开功能的示例
+    program_url = [
+        ["entel", "64"],
+        ["msgbox", "即将打开浏览器", "提示"],
+        ["openurl", "https://www.example.com"],
+        ["exit", 0]
+    ]
+    try:
+        pe_url = gen_windows(program_url)
+        with open("pe_url_64.exe", "wb") as f:
+            f.write(pe_url)
+        print("64位URL程序生成: pe_url_64.exe")
+    except Exception as e:
+        print(f"URL程序生成失败: {e}")

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import os
+import json
 from mcd.lexer import tokenize
 from mcd.parser import parse
 from mcd.backend_linux import gen_linux
@@ -48,5 +49,17 @@ if __name__=="__main__":
         sys.exit(out)
 
     
-    with open(output,"wb") as f: f.write(out)
+    with open(output, "wb") as f:
+        if isinstance(out, int):
+            # 如果 out 是整数，需要先转换为字符串，再编码为字节
+            f.write(str(out).encode('utf-8'))
+        elif isinstance(out, dict):
+            # 如果 out 是字典，将其转换为JSON字符串，再编码为字节
+            f.write(json.dumps(out, indent=4, ensure_ascii=False).encode('utf-8'))
+        elif isinstance(out, str):
+            # 如果 out 是字符串，直接编码为字节
+            f.write(out.encode('utf-8'))
+        else:
+            # 如果 out 已经是字节对象，直接写入
+            f.write(out)
     print("编译完成:",output)

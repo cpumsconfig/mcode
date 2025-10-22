@@ -376,11 +376,22 @@ def parse(tokens):
             stmts.append(("tm", target))
             i += 2
 
+        # 在 parse 函数中找到 org 语句的处理
         elif t == "org":
-            if i+1 >= len(tokens):
-                raise SyntaxError(f"第{line_num}行: org语句缺少参数")
-            stmts.append(("org", int(tokens[i+1][0],0)))
-            i += 2
+            if i + 1 < len(tokens):
+                org_value = tokens[i+1][0]
+                # 检查是否是字符串（console 或 windows）
+                if org_value in ['console', 'windows']:
+                    stmts.append(("org", org_value))
+                else:
+                    # 如果是数字，按原来的方式处理
+                    try:
+                        stmts.append(("org", int(org_value, 0)))
+                    except ValueError:
+                        raise ValueError(f"Invalid org value: {org_value}")
+                i += 2
+            else:
+                raise ValueError("org statement requires an argument")
 
         elif t == "def":
             if i+1 >= len(tokens):
