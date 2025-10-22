@@ -219,7 +219,7 @@ beep 1000
 
 ## 许可证
 
-本项目遵循MSL许可证。
+本项目遵循MPL许可证。
 
 [LICENSE](LICENSE)
 
